@@ -29,6 +29,15 @@ import {
 } from 'lucide-react'
 
 export default function CurriculumPage() {
+  // Get course progress from localStorage
+  const getCourseProgress = (courseId, chapters) => {
+    const completed = localStorage.getItem(`completed_${courseId}`)
+    if (!completed || !chapters) return 0
+    const completedLessons = JSON.parse(completed)
+    const totalLessons = chapters.reduce((acc, chapter) => acc + (chapter.lessons?.length || 0), 0)
+    if (totalLessons === 0) return 0
+    return Math.round((completedLessons.length / totalLessons) * 100)
+  }
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState('all')
@@ -67,28 +76,6 @@ export default function CurriculumPage() {
     { id: 'backend', name: 'Backend', icon: Server }
   ]
 
-  const demoCourses = [
-    {
-      id: 1,
-      title: 'Complete Web Development Bootcamp',
-      category: 'web',
-      instructor: 'Dr. Angela Yu',
-      rating: 4.8,
-      students: 125000,
-      duration: '52 hours',
-      lessons: 85,
-      level: 'Beginner',
-      progress: 45,
-      icon: Code,
-      color: 'bg-blue-50',
-      iconColor: 'text-blue-600',
-      borderColor: 'border-blue-200',
-      description: 'Learn HTML, CSS, JavaScript, React, Node.js, and more in this comprehensive bootcamp',
-      skills: ['HTML', 'CSS', 'JavaScript', 'React', 'Node.js'],
-      enrolled: true
-    }
-  ]
-
   const allCourses = [
     ...arenaCourses.map(course => ({
       ...course,
@@ -106,8 +93,7 @@ export default function CurriculumPage() {
       level: course.level || 'Beginner',
       progress: 0,
       description: course.description || 'AI-generated course',
-    })),
-    ...demoCourses
+    }))
   ]
 
   const stats = [
@@ -145,8 +131,17 @@ export default function CurriculumPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filteredCourses.map((course) => {
             const Icon = course.icon
+            const progress = getCourseProgress(course.id, course.chapters)
+            const actionLabel = progress === 0 ? 'Start' : 'Continue'
+            const handleReset = () => {
+              localStorage.removeItem(`completed_${course.id}`)
+              window.location.reload()
+            }
             return (
-              <div key={course.id} className="bg-white rounded-xl border border-gray-200 p-6">
+              <div 
+                key={course.id} 
+                className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg hover:border-gray-300 transition-all duration-200"
+              >
                 <div className="flex items-start justify-between mb-4">
                   <div className={`w-14 h-14 ${course.color} rounded-xl flex items-center justify-center border-2 ${course.borderColor}`}>
                     <Icon className={course.iconColor} size={28} />
@@ -156,8 +151,8 @@ export default function CurriculumPage() {
                   </span>
                 </div>
                 <h3 className="text-lg font-bold mb-2">{course.title}</h3>
-                <p className="text-sm text-gray-600 mb-4">{course.description}</p>
-                <div className="flex items-center gap-4 text-sm text-gray-600">
+                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{course.description}</p>
+                <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
                   <div className="flex items-center gap-1">
                     <Star size={14} className="text-yellow-500 fill-yellow-500" />
                     <span>{course.rating}</span>
@@ -166,6 +161,27 @@ export default function CurriculumPage() {
                     <Clock size={14} />
                     <span>{course.duration}</span>
                   </div>
+                  <div className="flex items-center gap-1">
+                    <BookOpen size={14} />
+                    <span>{course.lessons} lessons</span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition"
+                    onClick={() => router.push(`/curriculum/${course.id}`)}
+                  >
+                    {actionLabel}
+                  </button>
+                  <button
+                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 transition"
+                    onClick={handleReset}
+                  >
+                    Reset
+                  </button>
+                </div>
+                <div className="flex items-center justify-between mt-4">
+                  <span className="text-xs text-gray-500">Progress: {progress}%</span>
                 </div>
               </div>
             )

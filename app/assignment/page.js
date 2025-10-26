@@ -29,6 +29,12 @@ export default function AssignmentPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingAssignment, setEditingAssignment] = useState(null)
+  const [showQuizModal, setShowQuizModal] = useState(false)
+  const [activeQuizAssignment, setActiveQuizAssignment] = useState(null)
+  const [quizQuestions, setQuizQuestions] = useState([])
+  const [quizAnswers, setQuizAnswers] = useState({})
+  const [quizLoading, setQuizLoading] = useState(false)
+  const [quizResult, setQuizResult] = useState(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -61,65 +67,11 @@ export default function AssignmentPage() {
   }, [router, supabase])
 
   const loadAssignments = () => {
-    // Mock data - In production, fetch from Supabase
-    const mockAssignments = [
-      {
-        id: 1,
-        title: 'Build a Portfolio Website',
-        course: 'Web Development',
-        description: 'Create a responsive portfolio website using HTML, CSS, and JavaScript',
-        dueDate: '2025-10-30',
-        priority: 'high',
-        status: 'in-progress',
-        link: 'https://github.com/...',
-        createdAt: '2025-10-15'
-      },
-      {
-        id: 2,
-        title: 'Design System Documentation',
-        course: 'UI/UX Design',
-        description: 'Document the complete design system with components and guidelines',
-        dueDate: '2025-10-28',
-        priority: 'high',
-        status: 'pending',
-        link: 'https://figma.com/...',
-        createdAt: '2025-10-18'
-      },
-      {
-        id: 3,
-        title: 'Data Analysis Report',
-        course: 'Data Science',
-        description: 'Analyze the dataset and create visualizations with Python',
-        dueDate: '2025-11-05',
-        priority: 'medium',
-        status: 'pending',
-        link: '',
-        createdAt: '2025-10-20'
-      },
-      {
-        id: 4,
-        title: 'React Native App',
-        course: 'Mobile Development',
-        description: 'Build a simple todo app using React Native',
-        dueDate: '2025-10-25',
-        priority: 'high',
-        status: 'completed',
-        link: 'https://github.com/...',
-        createdAt: '2025-10-10'
-      },
-      {
-        id: 5,
-        title: 'REST API Development',
-        course: 'Backend Development',
-        description: 'Create a RESTful API with Node.js and Express',
-        dueDate: '2025-11-08',
-        priority: 'medium',
-        status: 'pending',
-        link: '',
-        createdAt: '2025-10-22'
-      }
-    ]
-    setAssignments(mockAssignments)
+    // Load from localStorage
+    const storedAssignments = localStorage.getItem('assignments')
+    if (storedAssignments) {
+      setAssignments(JSON.parse(storedAssignments))
+    }
   }
 
   const getDaysUntilDue = (dueDate) => {
@@ -217,21 +169,149 @@ export default function AssignmentPage() {
     setEditingAssignment(null)
   }
 
-  const filteredAssignments = assignments.filter(assignment => {
-    const matchesFilter = selectedFilter === 'all' || assignment.status === selectedFilter
-    const matchesSearch = 
-      assignment.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      assignment.course.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      assignment.description.toLowerCase().includes(searchQuery.toLowerCase())
-    
-    // Add overdue status
-    const daysUntil = getDaysUntilDue(assignment.dueDate)
-    if (daysUntil < 0 && assignment.status !== 'completed') {
-      assignment.status = 'overdue'
+  // Quiz functions
+  const generateQuiz = async (assignment) => {
+    setQuizLoading(true)
+    try {
+      const prompt = `Generate a quiz for the following course chapter:
+Course: ${assignment.courseTitle}
+Chapter: ${assignment.chapterTitle}
+Description: ${assignment.description}
+
+Create exactly 5 multiple choice questions. Return ONLY a JSON array with no additional text, in this exact format:
+[
+  {
+    "question": "Question text here?",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "answer": "Option A"
+  }
+]
+
+The questions should test understanding of the chapter content. Make the questions clear and educational.`
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ sender: 'user', text: prompt }]
+        })
+      })
+
+      const data = await response.json()
+      
+      // Extract JSON from response
+      let quizData
+      try {
+        // Try to find JSON array in the response
+        const jsonMatch = data.response.match(/\[\s*\{[\s\S]*?\}\s*\]/)
+        if (jsonMatch) {
+          quizData = JSON.parse(jsonMatch[0])
+        } else {
+          throw new Error('No JSON found')
+        }
+      } catch (e) {
+        // Fallback quiz if parsing fails
+        quizData = [
+          {
+            question: `What is the main topic of ${assignment.chapterTitle}?`,
+            options: ["Option A", "Option B", "Option C", "Option D"],
+            answer: "Option A"
+          },
+          {
+            question: `Which concept is important in ${assignment.chapterTitle}?`,
+            options: ["Concept 1", "Concept 2", "Concept 3", "Concept 4"],
+            answer: "Concept 1"
+          },
+          {
+            question: "What did you learn from this chapter?",
+            options: ["Learning 1", "Learning 2", "Learning 3", "Learning 4"],
+            answer: "Learning 1"
+          },
+          {
+            question: "How can you apply this knowledge?",
+            options: ["Application 1", "Application 2", "Application 3", "Application 4"],
+            answer: "Application 1"
+          },
+          {
+            question: "What is the key takeaway?",
+            options: ["Takeaway 1", "Takeaway 2", "Takeaway 3", "Takeaway 4"],
+            answer: "Takeaway 1"
+          }
+        ]
+      }
+
+      // Save quiz to assignment
+      const updatedAssignments = assignments.map(a => {
+        if (a.courseId === assignment.courseId && a.chapterIndex === assignment.chapterIndex) {
+          return { ...a, quizzes: quizData }
+        }
+        return a
+      })
+      setAssignments(updatedAssignments)
+      localStorage.setItem('assignments', JSON.stringify(updatedAssignments))
+      
+      setQuizQuestions(quizData)
+      setQuizAnswers({})
+      setQuizResult(null)
+    } catch (error) {
+      console.error('Error generating quiz:', error)
+      alert('Failed to generate quiz. Please try again.')
+    } finally {
+      setQuizLoading(false)
     }
+  }
+
+  const openQuiz = async (assignment) => {
+    setActiveQuizAssignment(assignment)
+    setShowQuizModal(true)
     
-    return matchesFilter && matchesSearch
-  })
+    if (assignment.quizzes && assignment.quizzes.length > 0) {
+      setQuizQuestions(assignment.quizzes)
+      setQuizAnswers({})
+      setQuizResult(null)
+    } else {
+      await generateQuiz(assignment)
+    }
+  }
+
+  const submitQuiz = () => {
+    let correct = 0
+    quizQuestions.forEach((q, idx) => {
+      if (quizAnswers[idx] === q.answer) {
+        correct++
+      }
+    })
+    setQuizResult({
+      score: correct,
+      total: quizQuestions.length,
+      percentage: Math.round((correct / quizQuestions.length) * 100)
+    })
+  }
+
+  const closeQuiz = () => {
+    setShowQuizModal(false)
+    setActiveQuizAssignment(null)
+    setQuizQuestions([])
+    setQuizAnswers({})
+    setQuizResult(null)
+    setQuizLoading(false)
+  }
+
+  const filteredAssignments = assignments.filter(assignment => {
+    const matchesFilter = selectedFilter === 'all' || assignment.status === selectedFilter;
+    const matchesSearch =
+      (assignment.title && assignment.title.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (assignment.course && assignment.course.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (assignment.description && assignment.description.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    // Add overdue status
+    const daysUntil = getDaysUntilDue(assignment.dueDate);
+    if (daysUntil < 0 && assignment.status !== 'completed') {
+      assignment.status = 'overdue';
+    }
+
+    return matchesFilter && matchesSearch;
+  });
 
   const stats = [
     {
@@ -439,6 +519,12 @@ export default function AssignmentPage() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openQuiz(assignment)}
+                        className="px-4 py-2 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors"
+                      >
+                        Quiz
+                      </button>
                       <select
                         value={assignment.status}
                         onChange={(e) => handleStatusChange(assignment.id, e.target.value)}
@@ -597,6 +683,121 @@ export default function AssignmentPage() {
                 >
                   {editingAssignment ? 'Update' : 'Add'} Assignment
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quiz Modal */}
+        {showQuizModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {activeQuizAssignment?.chapterTitle || 'Quiz'}
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {activeQuizAssignment?.courseTitle}
+                  </p>
+                </div>
+                <button
+                  onClick={closeQuiz}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="p-6">
+                {quizLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mb-4"></div>
+                    <p className="text-gray-600">Generating quiz questions...</p>
+                  </div>
+                ) : quizResult ? (
+                  <div className="text-center py-8">
+                    <div className={`w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center ${
+                      quizResult.percentage >= 80 ? 'bg-green-100' : 
+                      quizResult.percentage >= 60 ? 'bg-yellow-100' : 'bg-red-100'
+                    }`}>
+                      <span className={`text-3xl font-bold ${
+                        quizResult.percentage >= 80 ? 'text-green-600' : 
+                        quizResult.percentage >= 60 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {quizResult.percentage}%
+                      </span>
+                    </div>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                      {quizResult.percentage >= 80 ? 'Excellent!' : 
+                       quizResult.percentage >= 60 ? 'Good Job!' : 'Keep Learning!'}
+                    </h3>
+                    <p className="text-gray-600 mb-8">
+                      You scored {quizResult.score} out of {quizResult.total}
+                    </p>
+                    <div className="flex gap-3 justify-center">
+                      <button
+                        onClick={closeQuiz}
+                        className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Close
+                      </button>
+                      <button
+                        onClick={() => {
+                          setQuizResult(null)
+                          setQuizAnswers({})
+                        }}
+                        className="px-6 py-3 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors"
+                      >
+                        Retake Quiz
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {quizQuestions.map((question, idx) => (
+                      <div key={idx} className="border border-gray-200 rounded-lg p-6">
+                        <h3 className="font-semibold text-gray-900 mb-4">
+                          {idx + 1}. {question.question}
+                        </h3>
+                        <div className="space-y-2">
+                          {question.options.map((option, optIdx) => (
+                            <label
+                              key={optIdx}
+                              className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                            >
+                              <input
+                                type="radio"
+                                name={`question-${idx}`}
+                                value={option}
+                                checked={quizAnswers[idx] === option}
+                                onChange={(e) => setQuizAnswers({ ...quizAnswers, [idx]: e.target.value })}
+                                className="w-4 h-4 text-[#F5C832] focus:ring-[#F5C832]"
+                              />
+                              <span className="text-gray-700">{option}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+                      <button
+                        onClick={closeQuiz}
+                        className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={submitQuiz}
+                        disabled={Object.keys(quizAnswers).length !== quizQuestions.length}
+                        className="px-6 py-3 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Submit Quiz
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

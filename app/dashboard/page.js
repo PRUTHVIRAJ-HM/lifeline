@@ -17,7 +17,9 @@ import {
   Edit,
   Code,
   Palette,
-  Video
+  Video,
+  Plus,
+  Trash2
 } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -25,6 +27,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const [currentDate, setCurrentDate] = useState(new Date(2021, 11, 1)) // December 2021
+  const [recentCourses, setRecentCourses] = useState([])
+  const [todos, setTodos] = useState([])
+  const [newTodoTitle, setNewTodoTitle] = useState('')
+  const [newTodoCategory, setNewTodoCategory] = useState('')
+  const [newTodoTime, setNewTodoTime] = useState('')
+  const [showAddTodo, setShowAddTodo] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -42,7 +50,63 @@ export default function DashboardPage() {
     }
 
     getUser()
+    
+    // Load courses from curriculum
+    const storedCurriculum = localStorage.getItem('curriculumCourses')
+    if (storedCurriculum) {
+      const courses = JSON.parse(storedCurriculum)
+      // Get top 3 recent courses
+      setRecentCourses(courses.slice(0, 3))
+    }
+
+    // Load todos from localStorage
+    const storedTodos = localStorage.getItem('dashboardTodos')
+    if (storedTodos) {
+      setTodos(JSON.parse(storedTodos))
+    } else {
+      // Start with empty todos
+      setTodos([])
+    }
   }, [router, supabase])
+
+  // Save todos to localStorage whenever they change
+  const saveTodos = (updatedTodos) => {
+    setTodos(updatedTodos)
+    localStorage.setItem('dashboardTodos', JSON.stringify(updatedTodos))
+  }
+
+  // Toggle todo completion
+  const toggleTodo = (id) => {
+    const updatedTodos = todos.map(todo =>
+      todo.id === id ? { ...todo, completed: !todo.completed } : todo
+    )
+    saveTodos(updatedTodos)
+  }
+
+  // Add new todo
+  const addTodo = () => {
+    if (!newTodoTitle.trim()) return
+
+    const newTodo = {
+      id: Date.now(),
+      title: newTodoTitle.trim(),
+      category: newTodoCategory.trim(),
+      time: newTodoTime.trim(),
+      completed: false
+    }
+
+    saveTodos([...todos, newTodo])
+    setNewTodoTitle('')
+    setNewTodoCategory('')
+    setNewTodoTime('')
+    setShowAddTodo(false)
+  }
+
+  // Delete todo
+  const deleteTodo = (id) => {
+    const updatedTodos = todos.filter(todo => todo.id !== id)
+    saveTodos(updatedTodos)
+  }
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -57,6 +121,29 @@ export default function DashboardPage() {
         </div>
       </DashboardLayout>
     )
+  }
+
+  // Helper function to get icon based on course type or default
+  const getCourseIcon = (course, index) => {
+    if (course.type === 'design' || course.title?.toLowerCase().includes('design')) return Palette
+    if (course.type === 'programming' || course.title?.toLowerCase().includes('html') || course.title?.toLowerCase().includes('code')) return Code
+    if (course.type === 'video' || course.title?.toLowerCase().includes('motion')) return Video
+    // Default icons based on index
+    return [Code, Palette, Video][index % 3]
+  }
+
+  const getCourseColor = (index) => {
+    const colors = ['bg-[#E8E7F0]', 'bg-[#FFF4E6]', 'bg-[#E8F5E9]']
+    return colors[index % 3]
+  }
+
+  const getIconColor = (index) => {
+    const colors = ['text-purple-600', 'text-orange-600', 'text-green-600']
+    return colors[index % 3]
+  }
+
+  const handleCourseClick = (courseId) => {
+    router.push(`/curriculum/${courseId}`)
   }
 
   const courses = [
@@ -105,14 +192,6 @@ export default function DashboardPage() {
     { rank: 2, name: 'Ariana Agarwal', avatar: '👤', courses: 88, hours: 212, points: 10333, trend: 'down' }
   ]
 
-  const todos = [
-    { id: 1, title: 'Developing Restaurant Apps', category: 'Programming', time: '08:00 AM', completed: false },
-    { id: 2, title: 'Integrate API', category: '', time: '', completed: false },
-    { id: 3, title: 'Slicing Home Screen', category: '', time: '', completed: false },
-    { id: 4, title: 'Research Objective User', category: 'Product Design', time: '02:40 PM', completed: false },
-    { id: 5, title: 'Report Analysis P2P Business', category: 'Business', time: '04:50 PM', completed: true }
-  ]
-
   const getDaysInMonth = (date) => {
     const year = date.getFullYear()
     const month = date.getMonth()
@@ -140,31 +219,64 @@ export default function DashboardPage() {
             <div className="lg:col-span-2 space-y-6">
               {/* Courses */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {courses.map((course) => {
-                  const Icon = course.icon
-                  return (
-                    <div key={course.id} className={`${course.color} rounded-2xl p-6 hover:shadow-lg transition-shadow cursor-pointer`}>
-                      <div className="mb-4">
-                        <Icon className={`w-8 h-8 ${course.iconColor}`} />
+                {recentCourses.length > 0 ? (
+                  recentCourses.map((course, index) => {
+                    const Icon = getCourseIcon(course, index)
+                    const totalLessons = course.chapters?.reduce((acc, chapter) => acc + (chapter.lessons?.length || 0), 0) || 0
+                    return (
+                      <div 
+                        key={course.id} 
+                        className={`${getCourseColor(index)} rounded-2xl p-6 hover:shadow-lg transition-shadow cursor-pointer`}
+                        onClick={() => handleCourseClick(course.id)}
+                      >
+                        <div className="mb-4">
+                          <Icon className={`w-8 h-8 ${getIconColor(index)}`} />
+                        </div>
+                        <h3 className="font-semibold text-gray-900 mb-4 line-clamp-2">{course.title}</h3>
+                        <div className="flex items-center gap-4 text-sm text-gray-600">
+                          <div className="flex items-center gap-1">
+                            <BookOpen size={16} />
+                            <span>{totalLessons}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <FileText size={16} />
+                            <span>{course.chapters?.length || 0}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Users size={16} />
+                            <span>{Math.floor(Math.random() * 100) + 50}</span>
+                          </div>
+                        </div>
                       </div>
-                      <h3 className="font-semibold text-gray-900 mb-4">{course.name}</h3>
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
-                        <div className="flex items-center gap-1">
-                          <BookOpen size={16} />
-                          <span>{course.lessons}</span>
+                    )
+                  })
+                ) : (
+                  courses.map((course) => {
+                    const Icon = course.icon
+                    return (
+                      <div key={course.id} className={`${course.color} rounded-2xl p-6 hover:shadow-lg transition-shadow cursor-pointer opacity-50`}>
+                        <div className="mb-4">
+                          <Icon className={`w-8 h-8 ${course.iconColor}`} />
                         </div>
-                        <div className="flex items-center gap-1">
-                          <FileText size={16} />
-                          <span>{course.assignments}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Users size={16} />
-                          <span>{course.participants}</span>
+                        <h3 className="font-semibold text-gray-900 mb-4">{course.name}</h3>
+                        <div className="flex items-center gap-4 text-sm text-gray-600">
+                          <div className="flex items-center gap-1">
+                            <BookOpen size={16} />
+                            <span>{course.lessons}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <FileText size={16} />
+                            <span>{course.assignments}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Users size={16} />
+                            <span>{course.participants}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                )}
               </div>
 
               {/* Hours Spent & Performance */}
@@ -374,32 +486,106 @@ export default function DashboardPage() {
 
               {/* To Do List */}
               <div className="bg-white rounded-2xl p-6 shadow-sm">
-                <h3 className="font-semibold text-lg text-gray-900 mb-4">To Do List</h3>
-                <div className="space-y-3">
-                  {todos.map((todo) => (
-                    <div key={todo.id} className="flex items-start gap-3">
-                      <button className="mt-0.5">
-                        {todo.completed ? (
-                          <CheckCircle2 size={20} className="text-[#4DB6AC]" />
-                        ) : (
-                          <Circle size={20} className="text-gray-300" />
-                        )}
-                      </button>
-                      <div className="flex-1">
-                        <p className={`text-sm ${todo.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                          {todo.title}
-                        </p>
-                        {todo.category && (
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs text-gray-500">{todo.category}</span>
-                            {todo.time && (
-                              <span className="text-xs text-orange-500">{todo.time}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-lg text-gray-900">To Do List</h3>
+                  <button
+                    onClick={() => setShowAddTodo(!showAddTodo)}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition"
+                    title="Add Todo"
+                  >
+                    <Plus size={20} className="text-gray-600" />
+                  </button>
+                </div>
+
+                {showAddTodo && (
+                  <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Todo title..."
+                      value={newTodoTitle}
+                      onChange={(e) => setNewTodoTitle(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onKeyPress={(e) => e.key === 'Enter' && addTodo()}
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Category (optional)"
+                        value={newTodoCategory}
+                        onChange={(e) => setNewTodoCategory(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Time (optional)"
+                        value={newTodoTime}
+                        onChange={(e) => setNewTodoTime(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
                     </div>
-                  ))}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={addTodo}
+                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+                      >
+                        Add Todo
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowAddTodo(false)
+                          setNewTodoTitle('')
+                          setNewTodoCategory('')
+                          setNewTodoTime('')
+                        }}
+                        className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm font-medium"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {todos.length === 0 ? (
+                    <p className="text-center text-gray-400 py-8">No todos yet. Add one to get started!</p>
+                  ) : (
+                    todos.map((todo) => (
+                      <div key={todo.id} className="flex items-start gap-3 group">
+                        <button 
+                          className="mt-0.5"
+                          onClick={() => toggleTodo(todo.id)}
+                        >
+                          {todo.completed ? (
+                            <CheckCircle2 size={20} className="text-[#4DB6AC]" />
+                          ) : (
+                            <Circle size={20} className="text-gray-300 hover:text-gray-400" />
+                          )}
+                        </button>
+                        <div className="flex-1">
+                          <p className={`text-sm ${todo.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                            {todo.title}
+                          </p>
+                          {(todo.category || todo.time) && (
+                            <div className="flex items-center gap-2 mt-1">
+                              {todo.category && (
+                                <span className="text-xs text-gray-500">{todo.category}</span>
+                              )}
+                              {todo.time && (
+                                <span className="text-xs text-orange-500">{todo.time}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => deleteTodo(todo.id)}
+                          className="opacity-0 group-hover:opacity-100 transition p-1 hover:bg-red-50 rounded"
+                          title="Delete"
+                        >
+                          <Trash2 size={16} className="text-red-500" />
+                        </button>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
