@@ -37,9 +37,9 @@ export default function ArenaPage() {
   const [aiCourseData, setAiCourseData] = useState({
     topic: '',
     level: 'beginner',
-    duration: '4 weeks',
+    duration: '8 hours',
     goals: '',
-    chapters: 'auto',
+    chapters: 2,
     contentType: 'mixed'
   })
   
@@ -104,7 +104,7 @@ export default function ArenaPage() {
 
     try {
       // Prepare the prompt for course generation
-      const numChapters = aiCourseData.chapters === 'auto' ? Math.floor(Math.random() * 3) + 3 : aiCourseData.chapters
+      const numChapters = aiCourseData.chapters
 
       const systemPrompt = `You are an expert course creator AI. Generate a detailed, structured course curriculum based on the user's requirements. Return ONLY a valid JSON object with no additional text or markdown formatting.`
 
@@ -131,7 +131,7 @@ Generate a JSON object with this exact structure:
       "lessons": [
         {
           "title": "Lesson title",
-          "content": "Detailed lesson content explaining the topic (3-4 paragraphs of educational content)",
+          "content": "Detailed lesson content with proper markdown formatting.\\n\\n# Main Heading\\n\\nIntroductory paragraph explaining the topic.\\n\\n## Subheading\\n\\nMore detailed content here.\\n\\n- Bullet point 1\\n- Bullet point 2\\n- Bullet point 3\\n\\n\`\`\`\\ncode example here\\n\`\`\`\\n\\nTip: Important tips should be prefixed with 'Tip:' for special formatting.\\n\\nConclusion paragraph.",
           "duration": "10-15 min"
         }
       ]
@@ -142,11 +142,12 @@ Generate a JSON object with this exact structure:
 IMPORTANT:
 - Each chapter must have a clear outline (3-5 bullet points in the 'outline' array)
 - Each chapter must have 3-5 lessons
-- Each lesson must have detailed content (at least 3 paragraphs)
-- Content should be educational and comprehensive
+- Each lesson content MUST use markdown formatting with headings (# ## ###), bullet points (-), code blocks (\`\`\`), and tips (Tip:)
+- Content should be educational and comprehensive with at least 3-4 paragraphs per lesson
 - Make sure the course is tailored to ${aiCourseData.level} level
 - Each chapter should build upon the previous one
-- Lessons should be unique and not repetitive.`
+- Lessons should be unique and not repetitive
+- Use proper markdown syntax in the content field for better formatting`
 
       // Call the Ollama API
       const response = await fetch('/api/chat', {
@@ -289,9 +290,9 @@ IMPORTANT:
       setAiCourseData({
         topic: '',
         level: 'beginner',
-        duration: '4 weeks',
+        duration: '8 hours',
         goals: '',
-        chapters: 'auto',
+        chapters: 2,
         contentType: 'mixed'
       })
     } catch (error) {
@@ -613,28 +614,19 @@ IMPORTANT:
                     onChange={(e) => setAiCourseData({...aiCourseData, duration: e.target.value})}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900"
                   >
-                    <option value="2 weeks">2 weeks</option>
-                    <option value="4 weeks">4 weeks</option>
-                    <option value="8 weeks">8 weeks</option>
-                    <option value="12 weeks">12 weeks</option>
+                    <option value="4 hours">4 hours</option>
+                    <option value="8 hours">8 hours</option>
+                    <option value="12 hours">12 hours</option>
+                    <option value="16 hours">16 hours</option>
+                    <option value="20 hours">20 hours</option>
                     <option value="self-paced">Self-paced</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-bold text-gray-900 mb-2">Number of Chapters</label>
-                  <div className="grid grid-cols-6 gap-2">
-                    <button
-                      onClick={() => setAiCourseData({...aiCourseData, chapters: 'auto'})}
-                      className={`col-span-2 px-4 py-3 rounded-lg border-2 font-medium text-sm ${
-                        aiCourseData.chapters === 'auto'
-                          ? 'border-[#F5C832] bg-yellow-50 text-gray-900'
-                          : 'border-gray-300 text-gray-700 hover:border-gray-400'
-                      }`}
-                    >
-                      Auto
-                    </button>
-                    {[5, 8, 10, 12].map((num) => (
+                  <div className="grid grid-cols-4 gap-2">
+                    {[2, 3, 4, 5].map((num) => (
                       <button
                         key={num}
                         onClick={() => setAiCourseData({...aiCourseData, chapters: num})}

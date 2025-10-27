@@ -243,8 +243,7 @@ export default function DashboardPage() {
                             <span>{course.chapters?.length || 0}</span>
                           </div>
                           <div className="flex items-center gap-1">
-                            <Users size={16} />
-                            <span>{Math.floor(Math.random() * 100) + 50}</span>
+                            {/* Removed students enrolled */}
                           </div>
                         </div>
                       </div>
@@ -269,8 +268,7 @@ export default function DashboardPage() {
                             <span>{course.assignments}</span>
                           </div>
                           <div className="flex items-center gap-1">
-                            <Users size={16} />
-                            <span>{course.participants}</span>
+                            {/* Removed students enrolled */}
                           </div>
                         </div>
                       </div>

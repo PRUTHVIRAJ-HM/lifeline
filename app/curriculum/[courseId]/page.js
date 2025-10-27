@@ -50,6 +50,101 @@ export default function CourseDetailPage() {
     };
     const isFirstLesson = readModal.chapterIndex === 0 && readModal.lessonIndex === 0;
     const isLastLesson = readModal.chapterIndex === totalChapters - 1 && readModal.lessonIndex === totalLessons - 1;
+    // Parse lesson content for headings, code, and tips
+    const content = lesson.content || lesson.description || 'Content will be available soon.';
+    // Simple markdown-like parsing for headings, code blocks, and tips
+    const lines = content.split('\n');
+    const parsed = [];
+    let inCode = false;
+    let codeBuffer = [];
+    let inList = false;
+    let listItems = [];
+    
+    const flushList = () => {
+      if (listItems.length > 0) {
+        parsed.push(
+          <ul key={`list-${parsed.length}`} className="ml-6 space-y-2 mb-4">
+            {listItems}
+          </ul>
+        );
+        listItems = [];
+        inList = false;
+      }
+    };
+    
+    lines.forEach((line, idx) => {
+      if (line.trim().startsWith('```')) {
+        flushList();
+        if (!inCode) {
+          inCode = true;
+          codeBuffer = [];
+        } else {
+          inCode = false;
+          parsed.push(
+            <pre key={`code-${idx}`} className="bg-gray-100 border border-gray-300 rounded-lg p-4 mb-4 text-sm overflow-x-auto font-mono">
+              <code className="text-gray-800">{codeBuffer.join('\n')}</code>
+            </pre>
+          );
+          codeBuffer = [];
+        }
+      } else if (inCode) {
+        codeBuffer.push(line);
+      } else if (/^#{1,3} /.test(line)) {
+        flushList();
+        // Heading
+        const level = line.match(/^#+/)[0].length;
+        const text = line.replace(/^#+ /, '');
+        parsed.push(
+          level === 1 ? <h1 key={`h1-${idx}`} className="text-3xl font-bold mt-8 mb-4 text-gray-900">{text}</h1>
+          : level === 2 ? <h2 key={`h2-${idx}`} className="text-2xl font-semibold mt-6 mb-3 text-gray-800">{text}</h2>
+          : <h3 key={`h3-${idx}`} className="text-xl font-semibold mt-4 mb-2 text-gray-800">{text}</h3>
+        );
+      } else if (/^\s*[-*]\s/.test(line)) {
+        // Bullet list
+        inList = true;
+        const text = line.replace(/^\s*[-*]\s/, '');
+        listItems.push(<li key={`li-${idx}`} className="list-disc text-base text-gray-700">{text}</li>);
+      } else if (/^Tip:/i.test(line)) {
+        flushList();
+        // Tip box
+        parsed.push(
+          <div key={`tip-${idx}`} className="bg-green-50 border-l-4 border-green-500 p-4 my-4 rounded-r-lg">
+            <p className="text-green-800 text-base">
+              <strong className="font-bold">Tip:</strong> {line.replace(/^Tip:\s*/i, '').trim()}
+            </p>
+          </div>
+        );
+      } else if (/^Note:/i.test(line)) {
+        flushList();
+        // Note box
+        parsed.push(
+          <div key={`note-${idx}`} className="bg-blue-50 border-l-4 border-blue-500 p-4 my-4 rounded-r-lg">
+            <p className="text-blue-800 text-base">
+              <strong className="font-bold">Note:</strong> {line.replace(/^Note:\s*/i, '').trim()}
+            </p>
+          </div>
+        );
+      } else if (/^Example:/i.test(line)) {
+        flushList();
+        // Example box
+        parsed.push(
+          <div key={`example-${idx}`} className="bg-gray-50 border border-gray-300 rounded-lg p-4 my-4">
+            <p className="text-gray-700 text-base">
+              <strong className="font-bold text-gray-900">Example:</strong> {line.replace(/^Example:\s*/i, '').trim()}
+            </p>
+          </div>
+        );
+      } else if (line.trim() !== '') {
+        if (inList) {
+          flushList();
+        }
+        parsed.push(<p key={`p-${idx}`} className="text-base leading-relaxed mb-4 text-gray-700">{line}</p>);
+      } else {
+        flushList();
+      }
+    });
+    
+    flushList(); // Flush any remaining list items
     return (
       <div className="fixed inset-0 z-50 bg-white flex flex-col w-full h-full overflow-auto">
         <div className="flex justify-end p-6">
@@ -62,14 +157,13 @@ export default function CourseDetailPage() {
           </button>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center px-4 pb-12">
-          <div className="max-w-3xl w-full mx-auto">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">{lesson.title}</h2>
-            <p className="text-base text-gray-500 mb-6">Chapter {readModal.chapterIndex + 1}, Lesson {readModal.lessonIndex + 1}</p>
-            <div className="prose max-w-none text-gray-800">
-              <h3 className="text-xl font-semibold mb-4">Lesson Content</h3>
-              <div className="bg-gray-50 rounded-lg p-8 mb-8 whitespace-pre-line text-lg">
-                {lesson.content || lesson.description || 'Content will be available soon.'}
-              </div>
+          <div className="max-w-4xl w-full mx-auto bg-white">
+            <div className="mb-8 pb-6 border-b border-gray-200">
+              <h2 className="text-4xl font-bold text-gray-900 mb-3">{lesson.title}</h2>
+              <p className="text-base text-gray-500">Chapter {readModal.chapterIndex + 1}, Lesson {readModal.lessonIndex + 1}</p>
+            </div>
+            <div className="prose prose-lg max-w-none text-gray-800 mb-8">
+              {parsed}
             </div>
             <div className="flex justify-between mt-8">
               <button
@@ -90,7 +184,7 @@ export default function CourseDetailPage() {
           </div>
         </div>
       </div>
-    )
+    );
   }
   // Modal for reading lesson content
   const [readModal, setReadModal] = useState({ open: false, chapterIndex: null, lessonIndex: null })
@@ -290,17 +384,10 @@ export default function CourseDetailPage() {
                 <p className="text-gray-600 mb-4">{course.description}</p>
                 
                 <div className="flex items-center gap-6 text-sm text-gray-600">
-                  <div className="flex items-center gap-1">
-                    <Star size={16} className="text-yellow-500 fill-yellow-500" />
-                    <span className="font-semibold">4.8</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Users size={16} />
-                    <span>1,234 students</span>
-                  </div>
+                  {/* Removed ratings and students enrolled */}
                   <div className="flex items-center gap-1">
                     <Clock size={16} />
-                    <span>{course.duration || '8 weeks'}</span>
+                    <span>{course.duration || '8 hours'}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <BookOpen size={16} />

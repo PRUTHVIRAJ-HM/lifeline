@@ -146,17 +146,10 @@ export default function CurriculumPage() {
                   <div className={`w-14 h-14 ${course.color} rounded-xl flex items-center justify-center border-2 ${course.borderColor}`}>
                     <Icon className={course.iconColor} size={28} />
                   </div>
-                  <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
-                    Enrolled
-                  </span>
                 </div>
                 <h3 className="text-lg font-bold mb-2">{course.title}</h3>
                 <p className="text-sm text-gray-600 mb-4 line-clamp-2">{course.description}</p>
                 <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
-                  <div className="flex items-center gap-1">
-                    <Star size={14} className="text-yellow-500 fill-yellow-500" />
-                    <span>{course.rating}</span>
-                  </div>
                   <div className="flex items-center gap-1">
                     <Clock size={14} />
                     <span>{course.duration}</span>
