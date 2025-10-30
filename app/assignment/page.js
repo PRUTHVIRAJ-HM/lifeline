@@ -66,6 +66,13 @@ export default function AssignmentPage() {
     getUser()
   }, [router, supabase])
 
+  // Save assignments to localStorage whenever they change
+  useEffect(() => {
+    if (assignments.length > 0) {
+      localStorage.setItem('assignments', JSON.stringify(assignments))
+    }
+  }, [assignments])
+
   const loadAssignments = () => {
     // Load from localStorage
     const storedAssignments = localStorage.getItem('assignments')
@@ -173,12 +180,14 @@ export default function AssignmentPage() {
   const generateQuiz = async (assignment) => {
     setQuizLoading(true)
     try {
-      const prompt = `Generate a quiz for the following course chapter:
+      const prompt = `You are an educational quiz generator. Generate a quiz for the following course chapter:
+
 Course: ${assignment.courseTitle}
 Chapter: ${assignment.chapterTitle}
 Description: ${assignment.description}
 
-Create exactly 5 multiple choice questions. Return ONLY a JSON array with no additional text, in this exact format:
+Create exactly 5 multiple choice questions that test understanding of this chapter. Return ONLY a valid JSON array with no additional text, markdown formatting, or explanations. Use this exact format:
+
 [
   {
     "question": "Question text here?",
@@ -187,62 +196,119 @@ Create exactly 5 multiple choice questions. Return ONLY a JSON array with no add
   }
 ]
 
-The questions should test understanding of the chapter content. Make the questions clear and educational.`
+Requirements:
+- Make questions educational and test understanding
+- Each question must have exactly 4 options
+- The "answer" field must match one of the options exactly
+- Return ONLY the JSON array, nothing else`
 
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ sender: 'user', text: prompt }]
-        })
+        body: JSON.stringify({ prompt })
       })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate quiz')
+      }
 
       const data = await response.json()
       
       // Extract JSON from response
       let quizData
       try {
+        // Clean the response text
+        let responseText = data.response.trim()
+        
+        // Remove markdown code blocks if present
+        responseText = responseText.replace(/```json\s*/g, '').replace(/```\s*/g, '')
+        
         // Try to find JSON array in the response
-        const jsonMatch = data.response.match(/\[\s*\{[\s\S]*?\}\s*\]/)
-        if (jsonMatch) {
+        const jsonMatch = responseText.match(/\[\s*\{[\s\S]*?\}\s*\]/g)
+        if (jsonMatch && jsonMatch.length > 0) {
           quizData = JSON.parse(jsonMatch[0])
         } else {
-          throw new Error('No JSON found')
+          // Try parsing the whole response
+          quizData = JSON.parse(responseText)
         }
+
+        // Validate the quiz data
+        if (!Array.isArray(quizData) || quizData.length === 0) {
+          throw new Error('Invalid quiz format')
+        }
+
+        // Validate each question
+        quizData = quizData.slice(0, 5).map(q => {
+          if (!q.question || !Array.isArray(q.options) || q.options.length !== 4 || !q.answer) {
+            throw new Error('Invalid question format')
+          }
+          return {
+            question: q.question,
+            options: q.options,
+            answer: q.answer
+          }
+        })
+
       } catch (e) {
-        // Fallback quiz if parsing fails
+        console.error('Quiz parsing error:', e)
+        // Fallback quiz with generic questions
         quizData = [
           {
-            question: `What is the main topic of ${assignment.chapterTitle}?`,
-            options: ["Option A", "Option B", "Option C", "Option D"],
-            answer: "Option A"
+            question: `What is the main topic covered in "${assignment.chapterTitle}"?`,
+            options: [
+              "The chapter covers the fundamental concepts",
+              "Advanced techniques and applications",
+              "Historical background and context",
+              "Practical examples and use cases"
+            ],
+            answer: "The chapter covers the fundamental concepts"
           },
           {
-            question: `Which concept is important in ${assignment.chapterTitle}?`,
-            options: ["Concept 1", "Concept 2", "Concept 3", "Concept 4"],
-            answer: "Concept 1"
+            question: `Which of the following best describes the key learning objective of "${assignment.chapterTitle}"?`,
+            options: [
+              "Understanding core principles",
+              "Memorizing definitions",
+              "Learning advanced algorithms",
+              "Developing practical skills"
+            ],
+            answer: "Understanding core principles"
           },
           {
-            question: "What did you learn from this chapter?",
-            options: ["Learning 1", "Learning 2", "Learning 3", "Learning 4"],
-            answer: "Learning 1"
+            question: "What is an important concept discussed in this chapter?",
+            options: [
+              "Basic theoretical foundations",
+              "Complex mathematical proofs",
+              "Historical timeline",
+              "Future predictions"
+            ],
+            answer: "Basic theoretical foundations"
           },
           {
-            question: "How can you apply this knowledge?",
-            options: ["Application 1", "Application 2", "Application 3", "Application 4"],
-            answer: "Application 1"
+            question: "How can you apply the knowledge from this chapter?",
+            options: [
+              "In real-world problem solving",
+              "Only in theoretical scenarios",
+              "In completely unrelated fields",
+              "Cannot be applied practically"
+            ],
+            answer: "In real-world problem solving"
           },
           {
-            question: "What is the key takeaway?",
-            options: ["Takeaway 1", "Takeaway 2", "Takeaway 3", "Takeaway 4"],
-            answer: "Takeaway 1"
+            question: "What is the key takeaway from this chapter?",
+            options: [
+              "Understanding the fundamental concepts presented",
+              "Memorizing all the details",
+              "Skipping to the next chapter",
+              "Focusing only on examples"
+            ],
+            answer: "Understanding the fundamental concepts presented"
           }
         ]
       }
 
       // Save quiz to assignment
       const updatedAssignments = assignments.map(a => {
-        if (a.courseId === assignment.courseId && a.chapterIndex === assignment.chapterIndex) {
+        if (a.id === assignment.id) {
           return { ...a, quizzes: quizData }
         }
         return a
@@ -256,6 +322,7 @@ The questions should test understanding of the chapter content. Make the questio
     } catch (error) {
       console.error('Error generating quiz:', error)
       alert('Failed to generate quiz. Please try again.')
+      setQuizLoading(false)
     } finally {
       setQuizLoading(false)
     }
@@ -265,11 +332,13 @@ The questions should test understanding of the chapter content. Make the questio
     setActiveQuizAssignment(assignment)
     setShowQuizModal(true)
     
+    // Check if assignment already has quizzes
     if (assignment.quizzes && assignment.quizzes.length > 0) {
       setQuizQuestions(assignment.quizzes)
       setQuizAnswers({})
       setQuizResult(null)
     } else {
+      // Auto-generate quiz when opening for the first time
       await generateQuiz(assignment)
     }
   }
@@ -281,11 +350,22 @@ The questions should test understanding of the chapter content. Make the questio
         correct++
       }
     })
-    setQuizResult({
+    const resultObj = {
       score: correct,
       total: quizQuestions.length,
       percentage: Math.round((correct / quizQuestions.length) * 100)
-    })
+    }
+    setQuizResult(resultObj)
+    // Mark assignment as completed and save quiz result after quiz attempt
+    if (activeQuizAssignment) {
+      const updatedAssignments = assignments.map(a =>
+        a.id === activeQuizAssignment.id
+          ? { ...a, status: 'completed', quizResult: resultObj }
+          : a
+      )
+      setAssignments(updatedAssignments)
+      localStorage.setItem('assignments', JSON.stringify(updatedAssignments))
+    }
   }
 
   const closeQuiz = () => {
@@ -456,7 +536,7 @@ The questions should test understanding of the chapter content. Make the questio
               const statusColors = getStatusColor(assignment.status)
               const daysUntil = getDaysUntilDue(assignment.dueDate)
               const isOverdue = daysUntil < 0 && assignment.status !== 'completed'
-              
+              const isCompleted = assignment.status === 'completed'
               return (
                 <div
                   key={assignment.id}
@@ -479,7 +559,6 @@ The questions should test understanding of the chapter content. Make the questio
                             </span>
                           </div>
                           <p className="text-gray-700 mb-4">{assignment.description}</p>
-                          
                           {/* Due Date */}
                           <div className="flex items-center gap-6 text-sm">
                             <div className="flex items-center gap-2">
@@ -488,18 +567,20 @@ The questions should test understanding of the chapter content. Make the questio
                                 Due: <span className="font-semibold">{new Date(assignment.dueDate).toLocaleDateString()}</span>
                               </span>
                             </div>
-                            {assignment.status !== 'completed' && (
-                              <div className={`flex items-center gap-2 ${isOverdue ? 'text-red-600' : 'text-gray-600'}`}>
-                                {isOverdue ? <AlertCircle size={16} /> : <Clock size={16} />}
-                                <span className="font-semibold">
-                                  {isOverdue 
-                                    ? `Overdue by ${Math.abs(daysUntil)} days` 
-                                    : daysUntil === 0 
-                                    ? 'Due today!' 
-                                    : `${daysUntil} days left`
-                                  }
-                                </span>
-                              </div>
+                            {!isCompleted && (
+                              assignment.status !== 'completed' && (
+                                <div className={`flex items-center gap-2 ${isOverdue ? 'text-red-600' : 'text-gray-600'}`}>
+                                  {isOverdue ? <AlertCircle size={16} /> : <Clock size={16} />}
+                                  <span className="font-semibold">
+                                    {isOverdue 
+                                      ? `Overdue by ${Math.abs(daysUntil)} days` 
+                                      : daysUntil === 0 
+                                      ? 'Due today!' 
+                                      : `${daysUntil} days left`
+                                    }
+                                  </span>
+                                </div>
+                              )
                             )}
                             {assignment.link && (
                               <a
@@ -516,28 +597,31 @@ The questions should test understanding of the chapter content. Make the questio
                         </div>
                       </div>
                     </div>
-
                     {/* Actions */}
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => openQuiz(assignment)}
-                        className="px-4 py-2 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors"
+                        className="px-4 py-2 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors flex items-center gap-2"
+                        disabled={isCompleted}
                       >
-                        Quiz
+                        {assignment.quizzes && assignment.quizzes.length > 0 ? (
+                          <>
+                            <CheckCircle2 size={18} />
+                            Take Quiz
+                          </>
+                        ) : (
+                          <>
+                            <ClipboardCheck size={18} />
+                            Generate Quiz
+                          </>
+                        )}
                       </button>
-                      <select
-                        value={assignment.status}
-                        onChange={(e) => handleStatusChange(assignment.id, e.target.value)}
-                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#F5C832] focus:border-transparent"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="in-progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                      </select>
+                      {/* Status dropdown removed. Status is now only shown as a label above. */}
                       <button
                         onClick={() => handleEditAssignment(assignment)}
                         className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                         title="Edit"
+                        disabled={isCompleted}
                       >
                         <Edit size={18} />
                       </button>
@@ -545,6 +629,7 @@ The questions should test understanding of the chapter content. Make the questio
                         onClick={() => handleDeleteAssignment(assignment.id)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title="Delete"
+                        disabled={isCompleted}
                       >
                         <Trash2 size={18} />
                       </button>
@@ -701,12 +786,23 @@ The questions should test understanding of the chapter content. Make the questio
                     {activeQuizAssignment?.courseTitle}
                   </p>
                 </div>
-                <button
-                  onClick={closeQuiz}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X size={24} />
-                </button>
+                <div className="flex items-center gap-2">
+                  {!quizLoading && !quizResult && quizQuestions.length > 0 && (
+                    <button
+                      onClick={() => generateQuiz(activeQuizAssignment)}
+                      className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                      title="Regenerate Quiz"
+                    >
+                      Regenerate
+                    </button>
+                  )}
+                  <button
+                    onClick={closeQuiz}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
               </div>
 
               <div className="p-6">
@@ -714,6 +810,7 @@ The questions should test understanding of the chapter content. Make the questio
                   <div className="flex flex-col items-center justify-center py-12">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mb-4"></div>
                     <p className="text-gray-600">Generating quiz questions...</p>
+                    <p className="text-sm text-gray-500 mt-2">This may take a few moments</p>
                   </div>
                 ) : quizResult ? (
                   <div className="text-center py-8">
@@ -729,11 +826,11 @@ The questions should test understanding of the chapter content. Make the questio
                       </span>
                     </div>
                     <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                      {quizResult.percentage >= 80 ? 'Excellent!' : 
-                       quizResult.percentage >= 60 ? 'Good Job!' : 'Keep Learning!'}
+                      {quizResult.percentage >= 80 ? 'Excellent Work!' : 
+                       quizResult.percentage >= 60 ? 'Good Job!' : 'Keep Practicing!'}
                     </h3>
                     <p className="text-gray-600 mb-8">
-                      You scored {quizResult.score} out of {quizResult.total}
+                      You scored {quizResult.score} out of {quizResult.total} questions correctly
                     </p>
                     <div className="flex gap-3 justify-center">
                       <button
@@ -753,8 +850,13 @@ The questions should test understanding of the chapter content. Make the questio
                       </button>
                     </div>
                   </div>
-                ) : (
+                ) : quizQuestions.length > 0 ? (
                   <div className="space-y-6">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                      <p className="text-sm text-blue-800">
+                        <strong>Instructions:</strong> Answer all 5 questions and click "Submit Quiz" to see your score.
+                      </p>
+                    </div>
                     {quizQuestions.map((question, idx) => (
                       <div key={idx} className="border border-gray-200 rounded-lg p-6">
                         <h3 className="font-semibold text-gray-900 mb-4">
@@ -764,7 +866,11 @@ The questions should test understanding of the chapter content. Make the questio
                           {question.options.map((option, optIdx) => (
                             <label
                               key={optIdx}
-                              className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                              className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                                quizAnswers[idx] === option
+                                  ? 'bg-[#F5C832] border-[#F5C832] text-gray-900'
+                                  : 'border-gray-200 hover:bg-gray-50'
+                              }`}
                             >
                               <input
                                 type="radio"
@@ -774,28 +880,47 @@ The questions should test understanding of the chapter content. Make the questio
                                 onChange={(e) => setQuizAnswers({ ...quizAnswers, [idx]: e.target.value })}
                                 className="w-4 h-4 text-[#F5C832] focus:ring-[#F5C832]"
                               />
-                              <span className="text-gray-700">{option}</span>
+                              <span className="text-gray-700 flex-1">{option}</span>
                             </label>
                           ))}
                         </div>
                       </div>
                     ))}
 
-                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-                      <button
-                        onClick={closeQuiz}
-                        className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={submitQuiz}
-                        disabled={Object.keys(quizAnswers).length !== quizQuestions.length}
-                        className="px-6 py-3 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Submit Quiz
-                      </button>
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                      <p className="text-sm text-gray-600">
+                        {Object.keys(quizAnswers).length} of {quizQuestions.length} questions answered
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={closeQuiz}
+                          className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={submitQuiz}
+                          disabled={Object.keys(quizAnswers).length !== quizQuestions.length}
+                          className="px-6 py-3 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Submit Quiz
+                        </button>
+                      </div>
                     </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <ClipboardCheck size={32} className="text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No quiz available</h3>
+                    <p className="text-gray-600">Click the button below to generate a quiz</p>
+                    <button
+                      onClick={() => generateQuiz(activeQuizAssignment)}
+                      className="mt-4 px-6 py-3 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors"
+                    >
+                      Generate Quiz
+                    </button>
                   </div>
                 )}
               </div>

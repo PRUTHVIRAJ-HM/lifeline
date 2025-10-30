@@ -195,6 +195,18 @@ export default function CourseDetailPage() {
       const courses = JSON.parse(storedCourses)
       const updated = courses.filter(c => c.id !== params.courseId)
       localStorage.setItem('curriculumCourses', JSON.stringify(updated))
+      
+      // Also remove all assignments related to this course
+      const storedAssignments = localStorage.getItem('assignments')
+      if (storedAssignments) {
+        const assignments = JSON.parse(storedAssignments)
+        const updatedAssignments = assignments.filter(a => a.courseId !== params.courseId)
+        localStorage.setItem('assignments', JSON.stringify(updatedAssignments))
+      }
+      
+      // Remove completed lessons for this course
+      localStorage.removeItem(`completed_${params.courseId}`)
+      
       router.push('/curriculum')
     }
   }

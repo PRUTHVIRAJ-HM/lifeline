@@ -585,6 +585,16 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [activeSection, setActiveSection] = useState('profile')
+  // Auto-select diagnostics tab if ?tab=diagnostics is present
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const tab = params.get('tab')
+      if (tab === 'diagnostics') {
+        setActiveSection('diagnostics')
+      }
+    }
+  }, [])
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })

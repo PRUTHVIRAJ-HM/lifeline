@@ -23,20 +23,41 @@ import {
 } from 'lucide-react'
 
 export default function DashboardPage() {
+  const [averageQuizScore, setAverageQuizScore] = useState(null)
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
-  const [currentDate, setCurrentDate] = useState(new Date(2021, 11, 1)) // December 2021
+  const [currentDate, setCurrentDate] = useState(new Date()) // Current date instead of Dec 2021
   const [recentCourses, setRecentCourses] = useState([])
   const [todos, setTodos] = useState([])
   const [newTodoTitle, setNewTodoTitle] = useState('')
   const [newTodoCategory, setNewTodoCategory] = useState('')
   const [newTodoTime, setNewTodoTime] = useState('')
+  const [newTodoDate, setNewTodoDate] = useState('')
   const [showAddTodo, setShowAddTodo] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
+    // Calculate average quiz score from completed assignments using saved quizResult
+    const storedAssignments = localStorage.getItem('assignments')
+    if (storedAssignments) {
+      const assignments = JSON.parse(storedAssignments)
+      const completedWithQuiz = assignments.filter(a => a.status === 'completed' && a.quizResult && typeof a.quizResult.score === 'number' && typeof a.quizResult.total === 'number')
+      let totalScore = 0
+      let totalQuestions = 0
+      completedWithQuiz.forEach(a => {
+        totalScore += a.quizResult.score
+        totalQuestions += a.quizResult.total
+      })
+      if (totalQuestions > 0) {
+        setAverageQuizScore(Math.round((totalScore / totalQuestions) * 100))
+      } else {
+        setAverageQuizScore(null)
+      }
+    } else {
+      setAverageQuizScore(null)
+    }
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       
@@ -84,7 +105,7 @@ export default function DashboardPage() {
   }
 
   // Add new todo
-  const addTodo = () => {
+  const addTodo = async () => {
     if (!newTodoTitle.trim()) return
 
     const newTodo = {
@@ -92,13 +113,34 @@ export default function DashboardPage() {
       title: newTodoTitle.trim(),
       category: newTodoCategory.trim(),
       time: newTodoTime.trim(),
+      date: newTodoDate.trim(),
       completed: false
     }
 
     saveTodos([...todos, newTodo])
+    
+    // Add to Google Calendar if date and time are provided
+    if (newTodoDate && newTodoTime) {
+      try {
+        await fetch('/api/calendar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            summary: newTodoTitle.trim(),
+            description: newTodoCategory.trim() || 'Todo item',
+            date: newTodoDate,
+            time: newTodoTime
+          })
+        })
+      } catch (error) {
+        console.error('Failed to add to calendar:', error)
+      }
+    }
+    
     setNewTodoTitle('')
     setNewTodoCategory('')
     setNewTodoTime('')
+    setNewTodoDate('')
     setShowAddTodo(false)
   }
 
@@ -333,20 +375,15 @@ export default function DashboardPage() {
                 <div className="bg-white rounded-2xl p-6 shadow-sm">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-lg font-semibold text-gray-900">Performance</h2>
-                    <select className="text-sm border border-gray-300 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-[#4169E1]">
-                      <option>Monthly</option>
-                      <option>Weekly</option>
-                      <option>Yearly</option>
-                    </select>
                   </div>
                   <div className="flex items-center gap-4 mb-4">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-[#4DB6AC] rounded"></div>
-                      <span className="text-sm text-gray-600">Point Progress</span>
+                      <span className="text-sm text-gray-600">Quiz Score</span>
                     </div>
                   </div>
                   <div className="relative w-48 h-48 mx-auto">
-                    {/* Circular Progress */}
+                    {/* Circular Progress - dynamic based on averageQuizScore */}
                     <svg className="transform -rotate-90" width="192" height="192">
                       <circle
                         cx="96"
@@ -363,19 +400,25 @@ export default function DashboardPage() {
                         stroke="#4DB6AC"
                         strokeWidth="16"
                         fill="none"
-                        strokeDasharray={`${2 * Math.PI * 80 * 0.75} ${2 * Math.PI * 80}`}
+                        strokeDasharray={`${2 * Math.PI * 80 * ((averageQuizScore || 0) / 100)} ${2 * Math.PI * 80}`}
                         strokeLinecap="round"
                       />
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="w-32 h-32 bg-white rounded-full flex items-center justify-center">
-                        <div className="w-16 h-16 bg-[#FF8A65] rounded-full"></div>
+                        <div className="w-16 h-16 bg-[#FF8A65] rounded-full flex items-center justify-center">
+                          <span className="text-2xl font-bold text-white">
+                            {averageQuizScore !== null ? `${averageQuizScore}%` : '--'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
                   <div className="text-center mt-4">
-                    <p className="text-sm text-gray-500">Your Point:</p>
-                    <p className="text-2xl font-bold text-gray-900">8,966</p>
+                    <p className="text-sm text-gray-500">Average Quiz Score</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {averageQuizScore !== null ? `${averageQuizScore}%` : 'No quizzes yet'}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -465,20 +508,28 @@ export default function DashboardPage() {
                   {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
                     <div key={i} className="text-xs font-medium text-gray-500">{day}</div>
                   ))}
-                  {getDaysInMonth(currentDate).map((day, index) => (
-                    <div
-                      key={index}
-                      className={`text-sm py-2 rounded-lg ${
-                        day === 25 
-                          ? 'bg-[#4DB6AC] text-white font-semibold' 
-                          : day 
-                          ? 'text-gray-700 hover:bg-gray-100 cursor-pointer' 
-                          : ''
-                      }`}
-                    >
-                      {day || ''}
-                    </div>
-                  ))}
+                  {getDaysInMonth(currentDate).map((day, index) => {
+                    const today = new Date()
+                    const isToday = day && 
+                      currentDate.getMonth() === today.getMonth() && 
+                      currentDate.getFullYear() === today.getFullYear() && 
+                      day === today.getDate()
+                    
+                    return (
+                      <div
+                        key={index}
+                        className={`text-sm py-2 rounded-lg ${
+                          isToday
+                            ? 'bg-[#4DB6AC] text-white font-semibold' 
+                            : day 
+                            ? 'text-gray-700 hover:bg-gray-100 cursor-pointer' 
+                            : ''
+                        }`}
+                      >
+                        {day || ''}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -505,17 +556,24 @@ export default function DashboardPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       onKeyPress={(e) => e.key === 'Enter' && addTodo()}
                     />
+                    <input
+                      type="text"
+                      placeholder="Category (optional)"
+                      value={newTodoCategory}
+                      onChange={(e) => setNewTodoCategory(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
                     <div className="flex gap-2">
                       <input
-                        type="text"
-                        placeholder="Category (optional)"
-                        value={newTodoCategory}
-                        onChange={(e) => setNewTodoCategory(e.target.value)}
+                        type="date"
+                        placeholder="Date"
+                        value={newTodoDate}
+                        onChange={(e) => setNewTodoDate(e.target.value)}
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                       />
                       <input
-                        type="text"
-                        placeholder="Time (optional)"
+                        type="time"
+                        placeholder="Time"
                         value={newTodoTime}
                         onChange={(e) => setNewTodoTime(e.target.value)}
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -534,6 +592,7 @@ export default function DashboardPage() {
                           setNewTodoTitle('')
                           setNewTodoCategory('')
                           setNewTodoTime('')
+                          setNewTodoDate('')
                         }}
                         className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm font-medium"
                       >
@@ -543,14 +602,14 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                   {todos.length === 0 ? (
                     <p className="text-center text-gray-400 py-8">No todos yet. Add one to get started!</p>
                   ) : (
                     todos.map((todo) => (
                       <div key={todo.id} className="flex items-start gap-3 group">
                         <button 
-                          className="mt-0.5"
+                          className="mt-0.5 flex-shrink-0"
                           onClick={() => toggleTodo(todo.id)}
                         >
                           {todo.completed ? (
@@ -559,14 +618,17 @@ export default function DashboardPage() {
                             <Circle size={20} className="text-gray-300 hover:text-gray-400" />
                           )}
                         </button>
-                        <div className="flex-1">
-                          <p className={`text-sm ${todo.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm break-words ${todo.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
                             {todo.title}
                           </p>
-                          {(todo.category || todo.time) && (
-                            <div className="flex items-center gap-2 mt-1">
+                          {(todo.category || todo.time || todo.date) && (
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
                               {todo.category && (
-                                <span className="text-xs text-gray-500">{todo.category}</span>
+                                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{todo.category}</span>
+                              )}
+                              {todo.date && (
+                                <span className="text-xs text-blue-600">{new Date(todo.date).toLocaleDateString()}</span>
                               )}
                               {todo.time && (
                                 <span className="text-xs text-orange-500">{todo.time}</span>
@@ -576,7 +638,7 @@ export default function DashboardPage() {
                         </div>
                         <button
                           onClick={() => deleteTodo(todo.id)}
-                          className="opacity-0 group-hover:opacity-100 transition p-1 hover:bg-red-50 rounded"
+                          className="opacity-0 group-hover:opacity-100 transition p-1 hover:bg-red-50 rounded flex-shrink-0"
                           title="Delete"
                         >
                           <Trash2 size={16} className="text-red-500" />
