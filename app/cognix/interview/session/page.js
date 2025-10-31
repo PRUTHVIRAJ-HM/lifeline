@@ -23,6 +23,7 @@ export default function InterviewSessionPage() {
   const [loading, setLoading] = useState(false)
   const [conversationHistory, setConversationHistory] = useState([])
   const [isTranscribing, setIsTranscribing] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState("")
   const mediaRecorderRef = useRef(null)
   const audioChunksRef = useRef([])
   const recognitionRef = useRef(null)
@@ -99,6 +100,31 @@ export default function InterviewSessionPage() {
       setQuestion(data.question)
       setQuestionType(data.type || "Background question")
       setLoading(false)
+      
+      // Read out the question using text-to-speech
+      setTimeout(() => {
+        const utterance = new SpeechSynthesisUtterance(data.question)
+        utterance.rate = 0.95
+        utterance.pitch = 1.0
+        utterance.volume = 1.0
+        
+        // Use the same female voice as greeting
+        const voices = window.speechSynthesis.getVoices()
+        if (voices.length > 0) {
+          const preferredVoice = voices.find(voice => 
+            voice.lang.includes('en') && voice.name.includes('Female')
+          ) || voices.find(voice => 
+            voice.lang.includes('en') && (voice.name.includes('Google') || voice.name.includes('Microsoft') || voice.name.includes('Zira') || voice.name.includes('Samantha'))
+          ) || voices.find(voice => 
+            voice.lang.includes('en')
+          ) || voices[0]
+          utterance.voice = preferredVoice
+        }
+        
+        window.speechSynthesis.cancel() // Cancel any previous speech
+        window.speechSynthesis.speak(utterance)
+      }, 500) // Small delay to ensure UI has updated
+      
     } catch (err) {
       // Keep default question if API fails
       setLoading(false)
@@ -169,6 +195,7 @@ export default function InterviewSessionPage() {
     }
     
     setLoading(true)
+    setLoadingMessage("Analyzing your response...")
     
     try {
       // Send answer to Ollama for feedback
@@ -193,22 +220,25 @@ export default function InterviewSessionPage() {
       // Check if we've reached 5 questions
       if (questionIndex >= 5) {
         setLoading(false)
-        // Show completion message
+        setLoadingMessage("")
+        // Save conversation history to session storage and navigate to results
         setTimeout(() => {
-          alert('Interview complete! Great job!')
-          router.push('/cognix/interview')
+          sessionStorage.setItem('interviewHistory', JSON.stringify(newHistory))
+          router.push(`/cognix/interview/results?field=${encodeURIComponent(field)}&subcategory=${encodeURIComponent(subcategory)}`)
         }, 3000)
         return
       }
       
       // Move to next question after showing feedback
       setTimeout(async () => {
+        setLoadingMessage("Thinking...")
         setQuestionIndex(questionIndex + 1)
         setAnswer('')
         setAudioUrl(null)
         setAiResponse('')
         
         // Fetch next question with conversation history
+        setLoadingMessage("Running speech analysis...")
         try {
           const nextRes = await fetch("/api/ollama/interview", {
             method: "POST",
@@ -221,17 +251,46 @@ export default function InterviewSessionPage() {
             })
           })
           const nextData = await nextRes.json()
+          setLoadingMessage("Preparing next question...")
           setQuestion(nextData.question)
           setQuestionType(nextData.type || "Interview question")
           setLoading(false)
+          setLoadingMessage("")
+          
+          // Read out the next question using text-to-speech
+          setTimeout(() => {
+            const utterance = new SpeechSynthesisUtterance(nextData.question)
+            utterance.rate = 0.95
+            utterance.pitch = 1.0
+            utterance.volume = 1.0
+            
+            // Use the same female voice
+            const voices = window.speechSynthesis.getVoices()
+            if (voices.length > 0) {
+              const preferredVoice = voices.find(voice => 
+                voice.lang.includes('en') && voice.name.includes('Female')
+              ) || voices.find(voice => 
+                voice.lang.includes('en') && (voice.name.includes('Google') || voice.name.includes('Microsoft') || voice.name.includes('Zira') || voice.name.includes('Samantha'))
+              ) || voices.find(voice => 
+                voice.lang.includes('en')
+              ) || voices[0]
+              utterance.voice = preferredVoice
+            }
+            
+            window.speechSynthesis.cancel() // Cancel any previous speech
+            window.speechSynthesis.speak(utterance)
+          }, 500)
+          
         } catch (err) {
           setLoading(false)
+          setLoadingMessage("")
         }
       }, 3000)
       
     } catch (err) {
       setAiResponse("Could not get feedback. Please try again.")
       setLoading(false)
+      setLoadingMessage("")
     }
   }
 
@@ -271,8 +330,29 @@ export default function InterviewSessionPage() {
       {/* Main Content */}
       <div className="flex items-center justify-center min-h-[calc(100vh-80px)] py-12 px-6">
         <div className="w-full max-w-3xl">
+          {/* Loading Screen */}
+          {loading && loadingMessage && (
+            <div className="bg-white rounded-3xl shadow-lg border border-gray-100 p-12">
+              <div className="flex flex-col items-center justify-center text-center">
+                <div className="mb-6 relative">
+                  <div className="w-24 h-24 bg-gradient-to-br from-[#4285f4] to-blue-600 rounded-full flex items-center justify-center">
+                    <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-3">
+                  {loadingMessage}
+                </h2>
+                <div className="mt-8 flex gap-2">
+                  <div className="w-2 h-2 bg-[#4285f4] rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-[#4285f4] rounded-full animate-bounce delay-100"></div>
+                  <div className="w-2 h-2 bg-[#4285f4] rounded-full animate-bounce delay-200"></div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Greeting Screen */}
-          {!greetingDone && (
+          {!greetingDone && !loading && (
             <div className="bg-white rounded-3xl shadow-lg border border-gray-100 p-12">
               <div className="flex flex-col items-center justify-center text-center">
                 <div className="mb-6 relative">
@@ -302,7 +382,7 @@ export default function InterviewSessionPage() {
           )}
 
           {/* Question Card */}
-          {greetingDone && (
+          {greetingDone && !loading && (
             <div className="bg-white rounded-3xl shadow-lg border border-gray-100 p-8">
             {/* Question type badge and progress */}
             <div className="flex items-center justify-between mb-6">

@@ -20,7 +20,11 @@ import {
   FileText,
   Linkedin,
   Github,
-  Globe
+  Globe,
+  Sparkles,
+  Wand2,
+  Upload,
+  Loader2
 } from 'lucide-react'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
@@ -29,6 +33,12 @@ export default function CognixBuilderPage() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [currentStep, setCurrentStep] = useState(1)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [uploadMethod, setUploadMethod] = useState('file') // 'file' or 'text'
+  const [processingStep, setProcessingStep] = useState('') // Show what AI is doing
   const router = useRouter()
   const supabase = createClient()
 
@@ -140,6 +150,189 @@ export default function CognixBuilderPage() {
         [category]: prev.skills[category].filter((_, i) => i !== index)
       }
     }))
+  }
+
+  // AI Enhancement Functions
+  const generateAISummary = async () => {
+    setAiLoading(true)
+    try {
+      const res = await fetch('/api/cognix/resume/enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'summary',
+          data: {
+            fullName: resumeData.fullName,
+            experience: resumeData.experience,
+            skills: resumeData.skills,
+            targetRole: resumeData.experience[0]?.position || 'Professional'
+          }
+        })
+      })
+      const data = await res.json()
+      if (data.summary) {
+        updateField('summary', data.summary)
+      }
+    } catch (err) {
+      console.error('AI summary generation failed:', err)
+      alert('Failed to generate summary. Please try again.')
+    }
+    setAiLoading(false)
+  }
+
+  const enhanceExperienceWithAI = async (index) => {
+    setAiLoading(true)
+    try {
+      const exp = resumeData.experience[index]
+      const res = await fetch('/api/cognix/resume/enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'experience',
+          data: {
+            position: exp.position,
+            company: exp.company,
+            description: exp.description
+          }
+        })
+      })
+      const data = await res.json()
+      if (data.bulletPoints) {
+        updateArrayItem('experience', index, 'description', data.bulletPoints.join('\n• '))
+      }
+    } catch (err) {
+      console.error('AI enhancement failed:', err)
+      alert('Failed to enhance description. Please try again.')
+    }
+    setAiLoading(false)
+  }
+
+  const suggestSkillsWithAI = async () => {
+    setAiLoading(true)
+    try {
+      const res = await fetch('/api/cognix/resume/enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'skills',
+          data: {
+            position: resumeData.experience[0]?.position,
+            company: resumeData.experience[0]?.company,
+            experience: resumeData.experience,
+            currentSkills: resumeData.skills
+          }
+        })
+      })
+      const data = await res.json()
+      if (data.skills) {
+        // Merge suggested skills with existing ones
+        setResumeData(prev => ({
+          ...prev,
+          skills: {
+            technical: [...new Set([...prev.skills.technical, ...(data.skills.technical || [])])],
+            soft: [...new Set([...prev.skills.soft, ...(data.skills.soft || [])])],
+            languages: prev.skills.languages
+          }
+        }))
+      }
+    } catch (err) {
+      console.error('AI skill suggestions failed:', err)
+      alert('Failed to suggest skills. Please try again.')
+    }
+    setAiLoading(false)
+  }
+
+  const importResumeText = async () => {
+    if (uploadMethod === 'file' && !selectedFile) {
+      alert('Please select a PDF file')
+      return
+    }
+    
+    if (uploadMethod === 'text' && !importText.trim()) {
+      alert('Please paste your resume text')
+      return
+    }
+    
+    setAiLoading(true)
+    try {
+      let textContent = importText
+
+      // If file upload, extract text from PDF first
+      if (uploadMethod === 'file' && selectedFile) {
+        setProcessingStep('Extracting text from PDF...')
+        const formData = new FormData()
+        formData.append('file', selectedFile)
+        
+        const extractRes = await fetch('/api/cognix/resume/extract-pdf', {
+          method: 'POST',
+          body: formData
+        })
+        
+        const extractData = await extractRes.json()
+        if (extractData.text) {
+          textContent = extractData.text
+        } else {
+          throw new Error(extractData.error || 'Failed to extract PDF text')
+        }
+      }
+
+      // Now parse the text content
+      setProcessingStep('Analyzing resume content with AI...')
+      const res = await fetch('/api/cognix/resume/enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'parse',
+          data: { text: textContent }
+        })
+      })
+      const data = await res.json()
+      if (data.resumeData) {
+        setProcessingStep('Populating your resume...')
+        // Merge parsed data with existing data
+        setResumeData(prev => ({
+          ...prev,
+          fullName: data.resumeData.fullName || prev.fullName,
+          email: data.resumeData.email || prev.email,
+          phone: data.resumeData.phone || prev.phone,
+          summary: data.resumeData.summary || prev.summary,
+          experience: data.resumeData.experience?.length > 0 ? data.resumeData.experience : prev.experience,
+          education: data.resumeData.education?.length > 0 ? data.resumeData.education : prev.education,
+          skills: {
+            technical: data.resumeData.skills?.technical || prev.skills.technical,
+            soft: data.resumeData.skills?.soft || prev.skills.soft,
+            languages: prev.skills.languages
+          }
+        }))
+        setShowImportModal(false)
+        setImportText('')
+        setSelectedFile(null)
+        setProcessingStep('')
+        alert('Resume imported successfully!')
+      } else {
+        alert(data.error || 'Failed to parse resume')
+      }
+    } catch (err) {
+      console.error('Resume import failed:', err)
+      alert(err.message || 'Failed to import resume. Please try again.')
+    }
+    setAiLoading(false)
+    setProcessingStep('')
+  }
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        alert('Please select a PDF file')
+        return
+      }
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        alert('File size must be less than 10MB')
+        return
+      }
+      setSelectedFile(file)
+    }
   }
 
   const generatePDF = () => {
@@ -419,6 +612,126 @@ export default function CognixBuilderPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6">
+            <h3 className="text-2xl font-bold text-gray-900 mb-4">Import Resume</h3>
+            <p className="text-gray-600 mb-6">
+              Upload your resume PDF or paste the text, and AI will extract the information automatically.
+            </p>
+
+            {/* Toggle between file and text */}
+            <div className="flex gap-2 mb-6 p-1 bg-gray-100 rounded-lg">
+              <button
+                onClick={() => setUploadMethod('file')}
+                className={`flex-1 px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center gap-2 ${
+                  uploadMethod === 'file'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <FileText className="w-5 h-5" />
+                <span>Upload PDF</span>
+              </button>
+              <button
+                onClick={() => setUploadMethod('text')}
+                className={`flex-1 px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center gap-2 ${
+                  uploadMethod === 'text'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Sparkles className="w-5 h-5" />
+                <span>Paste Text</span>
+              </button>
+            </div>
+
+            {/* File upload */}
+            {uploadMethod === 'file' && (
+              <div className="mb-6">
+                <label className="block">
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-[#F5C832] transition-colors cursor-pointer">
+                    <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-700 font-medium mb-1">
+                      {selectedFile ? selectedFile.name : 'Click to upload or drag and drop'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      PDF file only (Max 10MB)
+                    </p>
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </div>
+                </label>
+                {selectedFile && (
+                  <div className="mt-3 flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-green-600" />
+                      <span className="text-sm text-green-900 font-medium">{selectedFile.name}</span>
+                      <span className="text-xs text-green-600">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                    </div>
+                    <button
+                      onClick={() => setSelectedFile(null)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Text paste */}
+            {uploadMethod === 'text' && (
+              <div className="mb-6">
+                <textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  rows="12"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F5C832] focus:border-transparent resize-none"
+                  placeholder="Paste your resume text here..."
+                />
+              </div>
+            )}
+
+            <div className="flex gap-4">
+              <button
+                onClick={importResumeText}
+                disabled={aiLoading || (uploadMethod === 'file' && !selectedFile) || (uploadMethod === 'text' && !importText.trim())}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {aiLoading ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    {processingStep || 'Processing...'}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={20} />
+                    Import with AI
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setShowImportModal(false)
+                  setImportText('')
+                  setSelectedFile(null)
+                }}
+                disabled={aiLoading}
+                className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
@@ -431,16 +744,25 @@ export default function CognixBuilderPage() {
             </button>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Cognix Builder</h1>
-              <p className="text-sm text-gray-600">Create your professional resume</p>
+              <p className="text-sm text-gray-600">Create your professional resume with AI</p>
             </div>
           </div>
-          <button
-            onClick={generatePDF}
-            className="flex items-center gap-2 px-6 py-3 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors"
-          >
-            <Download size={20} />
-            Download Resume
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-2 px-4 py-2 border-2 border-[#F5C832] text-gray-900 rounded-lg font-semibold hover:bg-yellow-50 transition-colors"
+            >
+              <Upload size={18} />
+              Import Resume
+            </button>
+            <button
+              onClick={generatePDF}
+              className="flex items-center gap-2 px-6 py-3 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors"
+            >
+              <Download size={20} />
+              Download Resume
+            </button>
+          </div>
         </div>
       </header>
 
@@ -615,15 +937,34 @@ export default function CognixBuilderPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Professional Summary
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-700">
+                    Professional Summary
+                  </label>
+                  <button
+                    onClick={generateAISummary}
+                    disabled={aiLoading}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {aiLoading ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        Generate with AI
+                      </>
+                    )}
+                  </button>
+                </div>
                 <textarea
                   value={resumeData.summary}
                   onChange={(e) => updateField('summary', e.target.value)}
                   rows="4"
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F5C832] focus:border-transparent resize-none"
-                  placeholder="A brief summary of your professional background, skills, and career goals..."
+                  placeholder="A brief summary of your professional background, skills, and career goals... Or click 'Generate with AI' to create one automatically!"
                 />
               </div>
             </div>
@@ -719,15 +1060,34 @@ export default function CognixBuilderPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Description
-                    </label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Description
+                      </label>
+                      <button
+                        onClick={() => enhanceExperienceWithAI(index)}
+                        disabled={aiLoading || !exp.position || !exp.company}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                      >
+                        {aiLoading ? (
+                          <>
+                            <Loader2 size={12} className="animate-spin" />
+                            Enhancing...
+                          </>
+                        ) : (
+                          <>
+                            <Wand2 size={12} />
+                            Enhance with AI
+                          </>
+                        )}
+                      </button>
+                    </div>
                     <textarea
                       value={exp.description}
                       onChange={(e) => updateArrayItem('experience', index, 'description', e.target.value)}
                       rows="3"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F5C832] focus:border-transparent resize-none"
-                      placeholder="Describe your responsibilities and achievements..."
+                      placeholder="Describe your responsibilities and achievements... Or use AI to create impactful bullet points!"
                     />
                   </div>
                 </div>
@@ -864,9 +1224,28 @@ export default function CognixBuilderPage() {
           {/* Step 4: Skills */}
           {currentStep === 4 && (
             <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">Skills</h2>
-                <p className="text-gray-600">Add your technical and soft skills</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Skills</h2>
+                  <p className="text-gray-600">Add your technical and soft skills</p>
+                </div>
+                <button
+                  onClick={suggestSkillsWithAI}
+                  disabled={aiLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {aiLoading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Suggesting...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} />
+                      Suggest Skills with AI
+                    </>
+                  )}
+                </button>
               </div>
 
               {/* Technical Skills */}

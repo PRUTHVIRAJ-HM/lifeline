@@ -75,6 +75,42 @@ export async function POST(request) {
   } catch (error) {
     console.error('Error processing answer:', error)
     
+    // Try Gemini API fallback
+    try {
+      const GEMINI_API_KEY = process.env.GEMINI_API_KEY
+      if (GEMINI_API_KEY) {
+        let geminiPrompt = `You are an expert interviewer evaluating a candidate's answer for a ${field} position (${subcategory}).\n\n`
+        geminiPrompt += `Interview Question: ${question}\n`
+        geminiPrompt += `Candidate's Answer: ${answer}\n\n`
+        geminiPrompt += `Provide brief, constructive feedback on their answer. Focus on:\n`
+        geminiPrompt += `1. Clarity and relevance\n`
+        geminiPrompt += `2. Key strengths in the response\n`
+        geminiPrompt += `3. One suggestion for improvement\n\n`
+        geminiPrompt += `Keep feedback to 3-4 sentences, professional and encouraging.`
+
+        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: geminiPrompt }] }],
+              generationConfig: { temperature: 0.7, maxOutputTokens: 200 }
+            })
+          })
+
+        if (geminiRes.ok) {
+          const geminiData = await geminiRes.json()
+          const geminiFeedback = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'Thank you for your answer. Your response shows good understanding of the topic.'
+          return NextResponse.json({
+            feedback: geminiFeedback,
+            success: true
+          })
+        }
+      }
+    } catch (geminiError) {
+      console.error('Gemini API fallback error:', geminiError)
+    }
+    
     return NextResponse.json({
       feedback: 'Thank you for your answer. Your response shows good understanding of the topic.',
       success: true
