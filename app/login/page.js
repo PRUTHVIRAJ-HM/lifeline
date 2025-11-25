@@ -14,6 +14,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  // Stable base URL for OAuth redirects. On the client, always use the current origin
+  // so phones/tablets don't get redirected to localhost. Use env only during SSR.
+  const siteUrl = typeof window !== 'undefined'
+    ? window.location.origin
+    : (process.env.NEXT_PUBLIC_SITE_URL || '')
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -37,35 +42,25 @@ export default function LoginPage() {
   }
 
   const handleGoogleLogin = async () => {
+    console.log('[OAuth] Starting Google login, redirect base:', siteUrl)
     try {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${siteUrl}/auth/callback`,
+          queryParams: {
+            prompt: 'select_account', // Force account chooser
+          },
         },
       })
       if (error) throw error
       // If OAuth flow returns immediately, navigate to dashboard
       if (data?.session) {
+        console.log('[OAuth] Immediate session obtained, redirecting to /dashboard')
         router.push('/dashboard')
       }
     } catch (error) {
-      setError(error.message)
-    }
-  }
-
-  const handleMicrosoftLogin = async () => {
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'azure',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-          scopes: 'email',
-        },
-      })
-
-      if (error) throw error
-    } catch (error) {
+      console.error('[OAuth] Google login error:', error)
       setError(error.message)
     }
   }
@@ -255,22 +250,6 @@ export default function LoginPage() {
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
               Log in with Google
-            </button>
-
-            {/* Microsoft Login */}
-            <button
-              type="button"
-              onClick={handleMicrosoftLogin}
-              className="w-full bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-3"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 23 23">
-                <path fill="#f3f3f3" d="M0 0h23v23H0z"/>
-                <path fill="#f35325" d="M1 1h10v10H1z"/>
-                <path fill="#81bc06" d="M12 1h10v10H12z"/>
-                <path fill="#05a6f0" d="M1 12h10v10H1z"/>
-                <path fill="#ffba08" d="M12 12h10v10H12z"/>
-              </svg>
-              Log in with Microsoft
             </button>
 
             {/* Sign up link */}

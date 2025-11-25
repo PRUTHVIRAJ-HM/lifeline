@@ -12,12 +12,18 @@ export default function Home() {
   useEffect(() => {
     const handleAuth = async () => {
       const code = searchParams.get('code')
+      console.log('[Root/Auth] code param:', code)
       
       if (code) {
         // Handle OAuth callback
         try {
+          console.log('[Root/Auth] Exchanging code for session...')
           const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-          if (error) throw error
+          if (error) {
+            console.error('[Root/Auth] Exchange error:', error)
+            throw error
+          }
+          console.log('[Root/Auth] Session exchange success, redirecting to /dashboard')
           router.push('/dashboard')
         } catch (error) {
           console.error('Auth error:', error)
@@ -26,6 +32,7 @@ export default function Home() {
       } else {
         // Check if user is already logged in
         const { data: { user } } = await supabase.auth.getUser()
+        console.log('[Root/Auth] Existing user check:', !!user)
         
         if (user) {
           router.push('/dashboard')
