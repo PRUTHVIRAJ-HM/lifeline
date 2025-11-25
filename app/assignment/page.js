@@ -66,18 +66,38 @@ export default function AssignmentPage() {
     getUser()
   }, [router, supabase])
 
-  // Save assignments to localStorage whenever they change
-  useEffect(() => {
-    if (assignments.length > 0) {
-      localStorage.setItem('assignments', JSON.stringify(assignments))
-    }
-  }, [assignments])
+  const loadAssignments = async () => {
+    if (!user) return
 
-  const loadAssignments = () => {
-    // Load from localStorage
-    const storedAssignments = localStorage.getItem('assignments')
-    if (storedAssignments) {
-      setAssignments(JSON.parse(storedAssignments))
+    const { data, error } = await supabase
+      .from('assignments')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error loading assignments:', error)
+    } else {
+      // Transform data to match existing format
+      const transformed = (data || []).map(a => ({
+        id: a.id,
+        title: a.title,
+        course: a.course,
+        courseId: a.course_id,
+        courseTitle: a.course_title,
+        chapterIndex: a.chapter_index,
+        chapterTitle: a.chapter_title,
+        description: a.description,
+        dueDate: a.due_date,
+        priority: a.priority,
+        status: a.status,
+        link: a.link,
+        quizzes: a.quizzes || [],
+        quizResult: a.quiz_result,
+        submitted: a.submitted,
+        createdAt: a.created_at
+      }))
+      setAssignments(transformed)
     }
   }
 
@@ -117,25 +137,50 @@ export default function AssignmentPage() {
     }
   }
 
-  const handleAddAssignment = () => {
+  const handleAddAssignment = async () => {
     if (!formData.title || !formData.course || !formData.dueDate) {
       alert('Please fill in all required fields')
       return
     }
 
-    const newAssignment = {
-      id: assignments.length + 1,
-      ...formData,
-      createdAt: new Date().toISOString().split('T')[0]
-    }
+    if (!user) return
 
-    if (editingAssignment) {
-      setAssignments(assignments.map(a => a.id === editingAssignment.id ? { ...newAssignment, id: editingAssignment.id } : a))
-    } else {
-      setAssignments([...assignments, newAssignment])
-    }
+    try {
+      const assignmentData = {
+        user_id: user.id,
+        title: formData.title,
+        course: formData.course,
+        description: formData.description,
+        due_date: formData.dueDate,
+        priority: formData.priority,
+        status: formData.status,
+        link: formData.link
+      }
 
-    resetForm()
+      if (editingAssignment) {
+        // Update existing assignment
+        const { error } = await supabase
+          .from('assignments')
+          .update(assignmentData)
+          .eq('id', editingAssignment.id)
+          .eq('user_id', user.id)
+
+        if (error) throw error
+      } else {
+        // Insert new assignment
+        const { error } = await supabase
+          .from('assignments')
+          .insert(assignmentData)
+
+        if (error) throw error
+      }
+
+      await loadAssignments()
+      resetForm()
+    } catch (error) {
+      console.error('Error saving assignment:', error)
+      alert('Failed to save assignment. Please try again.')
+    }
   }
 
   const handleEditAssignment = (assignment) => {
@@ -152,14 +197,42 @@ export default function AssignmentPage() {
     setShowAddModal(true)
   }
 
-  const handleDeleteAssignment = (id) => {
-    if (confirm('Are you sure you want to delete this assignment?')) {
-      setAssignments(assignments.filter(a => a.id !== id))
+  const handleDeleteAssignment = async (id) => {
+    if (!confirm('Are you sure you want to delete this assignment?') || !user) return
+
+    try {
+      const { error } = await supabase
+        .from('assignments')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      await loadAssignments()
+    } catch (error) {
+      console.error('Error deleting assignment:', error)
+      alert('Failed to delete assignment. Please try again.')
     }
   }
 
-  const handleStatusChange = (id, newStatus) => {
-    setAssignments(assignments.map(a => a.id === id ? { ...a, status: newStatus } : a))
+  const handleStatusChange = async (id, newStatus) => {
+    if (!user) return
+
+    try {
+      const { error } = await supabase
+        .from('assignments')
+        .update({ status: newStatus })
+        .eq('id', id)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      await loadAssignments()
+    } catch (error) {
+      console.error('Error updating assignment status:', error)
+      alert('Failed to update assignment status. Please try again.')
+    }
   }
 
   const resetForm = () => {
@@ -306,19 +379,23 @@ Requirements:
         ]
       }
 
-      // Save quiz to assignment
-      const updatedAssignments = assignments.map(a => {
-        if (a.id === assignment.id) {
-          return { ...a, quizzes: quizData }
-        }
-        return a
-      })
-      setAssignments(updatedAssignments)
-      localStorage.setItem('assignments', JSON.stringify(updatedAssignments))
+      // Save quiz to assignment in Supabase
+      if (user) {
+        const { error } = await supabase
+          .from('assignments')
+          .update({ quizzes: quizData })
+          .eq('id', assignment.id)
+          .eq('user_id', user.id)
+
+        if (error) throw error
+      }
       
       setQuizQuestions(quizData)
       setQuizAnswers({})
       setQuizResult(null)
+      
+      // Reload assignments to get updated data
+      await loadAssignments()
     } catch (error) {
       console.error('Error generating quiz:', error)
       alert('Failed to generate quiz. Please try again.')
@@ -343,7 +420,7 @@ Requirements:
     }
   }
 
-  const submitQuiz = () => {
+  const submitQuiz = async () => {
     let correct = 0
     quizQuestions.forEach((q, idx) => {
       if (quizAnswers[idx] === q.answer) {
@@ -358,13 +435,26 @@ Requirements:
     setQuizResult(resultObj)
     // Mark assignment as completed and save quiz result after quiz attempt
     if (activeQuizAssignment) {
-      const updatedAssignments = assignments.map(a =>
-        a.id === activeQuizAssignment.id
-          ? { ...a, status: 'completed', quizResult: resultObj }
-          : a
-      )
-      setAssignments(updatedAssignments)
-      localStorage.setItem('assignments', JSON.stringify(updatedAssignments))
+      // Update assignment with quiz result in Supabase
+      if (user && activeQuizAssignment) {
+        const { error } = await supabase
+          .from('assignments')
+          .update({ 
+            status: 'completed', 
+            quiz_result: resultObj 
+          })
+          .eq('id', activeQuizAssignment.id)
+          .eq('user_id', user.id)
+
+        if (error) {
+          console.error('Error saving quiz result:', error)
+          alert('Failed to save quiz result')
+          return
+        }
+      }
+
+      // Reload assignments to get updated data
+      await loadAssignments()
     }
   }
 
@@ -451,13 +541,6 @@ Requirements:
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Assignments</h1>
             <p className="text-gray-600">Track and manage your course assignments</p>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors"
-          >
-            <Plus size={20} />
-            Add Assignment
-          </button>
         </div>
 
         {/* Stats Grid */}
@@ -519,17 +602,8 @@ Requirements:
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">No assignments found</h3>
               <p className="text-gray-600 mb-4">
-                {searchQuery ? 'Try adjusting your search' : 'Get started by adding your first assignment'}
+                {searchQuery ? 'Try adjusting your search' : 'No assignments available yet'}
               </p>
-              {!searchQuery && (
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-                >
-                  <Plus size={20} />
-                  Add Assignment
-                </button>
-              )}
             </div>
           ) : (
             filteredAssignments.map((assignment) => {

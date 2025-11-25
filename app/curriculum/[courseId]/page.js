@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import DashboardLayout from '@/components/DashboardLayout'
 import { 
   BookOpen,
@@ -23,6 +24,17 @@ import {
 } from 'lucide-react'
 
 export default function CourseDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const supabase = createClient()
+  const [user, setUser] = useState(null)
+  const [course, setCourse] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [expandedChapter, setExpandedChapter] = useState(0)
+  const [currentLesson, setCurrentLesson] = useState(null)
+  const [completedLessons, setCompletedLessons] = useState([])
+  const [readModal, setReadModal] = useState({ open: false, chapterIndex: null, lessonIndex: null })
+
   // Helper to render the read modal
   const renderReadModal = () => {
     if (!readModal.open || !course || !course.chapters) return null
@@ -189,25 +201,38 @@ export default function CourseDetailPage() {
   // Modal for reading lesson content
   const [readModal, setReadModal] = useState({ open: false, chapterIndex: null, lessonIndex: null })
   // Remove course from curriculum
-  const handleDropout = () => {
-    const storedCourses = localStorage.getItem('curriculumCourses')
-    if (storedCourses) {
-      const courses = JSON.parse(storedCourses)
-      const updated = courses.filter(c => c.id !== params.courseId)
-      localStorage.setItem('curriculumCourses', JSON.stringify(updated))
-      
-      // Also remove all assignments related to this course
-      const storedAssignments = localStorage.getItem('assignments')
-      if (storedAssignments) {
-        const assignments = JSON.parse(storedAssignments)
-        const updatedAssignments = assignments.filter(a => a.courseId !== params.courseId)
-        localStorage.setItem('assignments', JSON.stringify(updatedAssignments))
-      }
-      
-      // Remove completed lessons for this course
-      localStorage.removeItem(`completed_${params.courseId}`)
-      
+  const handleDropout = async () => {
+    if (!user) return
+
+    try {
+      // Delete course from curriculum (source = 'curriculum')
+      const { error: courseError } = await supabase
+        .from('courses')
+        .delete()
+        .eq('id', params.courseId)
+        .eq('user_id', user.id)
+        .eq('source', 'curriculum')
+
+      if (courseError) throw courseError
+
+      // Delete course progress
+      await supabase
+        .from('course_progress')
+        .delete()
+        .eq('course_id', params.courseId)
+        .eq('user_id', user.id)
+
+      // Delete related assignments
+      await supabase
+        .from('assignments')
+        .delete()
+        .eq('course_id', params.courseId)
+        .eq('user_id', user.id)
+
       router.push('/curriculum')
+    } catch (error) {
+      console.error('Error dropping course:', error)
+      alert('Failed to drop course. Please try again.')
     }
   }
   const params = useParams()
@@ -219,36 +244,59 @@ export default function CourseDetailPage() {
   const [completedLessons, setCompletedLessons] = useState([])
 
   useEffect(() => {
-    const loadCourse = () => {
-      // Load from localStorage
-      const storedCourses = localStorage.getItem('curriculumCourses')
-      if (storedCourses) {
-        const courses = JSON.parse(storedCourses)
-        const foundCourse = courses.find(c => c.id === params.courseId)
-        if (foundCourse) {
-          setCourse(foundCourse)
-          // Set first lesson as current if available
-          if (foundCourse.chapters && foundCourse.chapters.length > 0 && 
-              foundCourse.chapters[0].lessons && foundCourse.chapters[0].lessons.length > 0) {
-            setCurrentLesson({
-              chapterIndex: 0,
-              lessonIndex: 0,
-              lesson: foundCourse.chapters[0].lessons[0]
-            })
-          }
-        }
+    const loadData = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        router.push('/login')
+        return
       }
+
+      setUser(user)
+
+      // Load course from Supabase
+      const { data: courseData, error: courseError } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('id', params.courseId)
+        .eq('user_id', user.id)
+        .single()
+
+      if (courseError || !courseData) {
+        console.error('Error loading course:', courseError)
+        router.push('/curriculum')
+        return
+      }
+
+      setCourse(courseData)
+
+      // Set first lesson as current if available
+      if (courseData.chapters && courseData.chapters.length > 0 && 
+          courseData.chapters[0].lessons && courseData.chapters[0].lessons.length > 0) {
+        setCurrentLesson({
+          chapterIndex: 0,
+          lessonIndex: 0,
+          lesson: courseData.chapters[0].lessons[0]
+        })
+      }
+
+      // Load completed lessons from Supabase
+      const { data: progressData, error: progressError } = await supabase
+        .from('course_progress')
+        .select('completed_lessons')
+        .eq('course_id', params.courseId)
+        .eq('user_id', user.id)
+        .single()
+
+      if (!progressError && progressData && progressData.completed_lessons) {
+        setCompletedLessons(progressData.completed_lessons)
+      }
+
       setLoading(false)
     }
 
-    loadCourse()
-
-    // Load completed lessons from localStorage
-    const completed = localStorage.getItem(`completed_${params.courseId}`)
-    if (completed) {
-      setCompletedLessons(JSON.parse(completed))
-    }
-  }, [params.courseId])
+    loadData()
+  }, [params.courseId, router, supabase])
 
   const toggleChapter = (index) => {
     setExpandedChapter(expandedChapter === index ? null : index)
@@ -261,36 +309,62 @@ export default function CourseDetailPage() {
     }
   }
 
-  const markLessonComplete = () => {
-    if (!currentLesson) return
+  const markLessonComplete = async () => {
+    if (!currentLesson || !user || !course) return
     
     const lessonId = `${currentLesson.chapterIndex}-${currentLesson.lessonIndex}`
     if (!completedLessons.includes(lessonId)) {
       const updated = [...completedLessons, lessonId]
       setCompletedLessons(updated)
-      localStorage.setItem(`completed_${params.courseId}`, JSON.stringify(updated))
+
+      // Update progress in Supabase
+      try {
+        const totalLessons = course.chapters.reduce((acc, chapter) => 
+          acc + (chapter.lessons?.length || 0), 0)
+        const progressPercentage = totalLessons > 0 
+          ? Math.round((updated.length / totalLessons) * 100)
+          : 0
+
+        const { error } = await supabase
+          .from('course_progress')
+          .upsert({
+            user_id: user.id,
+            course_id: course.id,
+            completed_lessons: updated,
+            progress_percentage: progressPercentage
+          }, {
+            onConflict: 'user_id,course_id'
+          })
+
+        if (error) throw error
+      } catch (error) {
+        console.error('Error saving progress:', error)
+      }
     }
 
     // Check if this is the last lesson of the chapter
     const currentChapter = course.chapters[currentLesson.chapterIndex]
     const isLastLessonOfChapter = currentLesson.lessonIndex === currentChapter.lessons.length - 1
     if (isLastLessonOfChapter) {
-      // Create assignment for this chapter
-      const assignments = JSON.parse(localStorage.getItem('assignments') || '[]')
-      const newAssignment = {
-        id: Date.now(),
-        courseId: course.id,
-        courseTitle: course.title,
-        chapterIndex: currentLesson.chapterIndex,
-        chapterTitle: currentChapter.title,
-        description: `Assignment for ${course.title} - Chapter ${currentLesson.chapterIndex + 1}: ${currentChapter.title}`,
-        dueDate: '',
-        status: 'pending',
-        quizzes: [], // Placeholder for quizzes
-        submitted: false,
-        createdAt: new Date().toISOString()
+      // Create assignment for this chapter in Supabase
+      try {
+        const { error } = await supabase
+          .from('assignments')
+          .insert({
+            user_id: user.id,
+            course_id: course.id,
+            course_title: course.title,
+            chapter_index: currentLesson.chapterIndex,
+            chapter_title: currentChapter.title,
+            description: `Assignment for ${course.title} - Chapter ${currentLesson.chapterIndex + 1}: ${currentChapter.title}`,
+            status: 'pending',
+            quizzes: []
+          })
+
+        if (error) throw error
+      } catch (error) {
+        console.error('Error creating assignment:', error)
       }
-      localStorage.setItem('assignments', JSON.stringify([...assignments, newAssignment]))
     }
 
     // Move to next lesson
@@ -446,9 +520,23 @@ export default function CourseDetailPage() {
               </button>
               <button
                 className="px-5 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 transition"
-                onClick={() => {
-                  localStorage.removeItem(`completed_${params.courseId}`)
-                  window.location.reload()
+                onClick={async () => {
+                  if (!user) return
+                  
+                  try {
+                    // Reset course progress
+                    await supabase
+                      .from('course_progress')
+                      .delete()
+                      .eq('course_id', params.courseId)
+                      .eq('user_id', user.id)
+
+                    setCompletedLessons([])
+                    window.location.reload()
+                  } catch (error) {
+                    console.error('Error resetting progress:', error)
+                    alert('Failed to reset progress')
+                  }
                 }}
               >
                 Reset

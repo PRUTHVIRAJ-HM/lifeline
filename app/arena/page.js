@@ -1,7 +1,9 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import { 
   Sparkles,
   Brain,
@@ -22,17 +24,18 @@ import {
 } from 'lucide-react'
 
 export default function ArenaPage() {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [showAIModal, setShowAIModal] = useState(false)
-  const [generatedCourses, setGeneratedCourses] = useState(() => {
-    const storedCourses = localStorage.getItem('arenaCourses')
-    return storedCourses ? JSON.parse(storedCourses) : []
-  })
+  const [generatedCourses, setGeneratedCourses] = useState([])
   const [isGenerating, setIsGenerating] = useState(false)
   const [enrolledCourses, setEnrolledCourses] = useState([])
   const [notification, setNotification] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [previewCourse, setPreviewCourse] = useState(null)
   const [expandedChapter, setExpandedChapter] = useState(null)
+  const router = useRouter()
+  const supabase = createClient()
   
   const [aiCourseData, setAiCourseData] = useState({
     topic: '',
@@ -43,60 +46,130 @@ export default function ArenaPage() {
     contentType: 'mixed'
   })
   
-  // Load generated courses from localStorage on mount
-  // Keep state in sync with localStorage on storage events (multi-tab)
-  React.useEffect(() => {
-    const syncCourses = () => {
-      const storedCourses = localStorage.getItem('arenaCourses')
-      if (storedCourses) {
-        setGeneratedCourses(JSON.parse(storedCourses))
+  // Load user and courses from Supabase
+  useEffect(() => {
+    const loadData = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        router.push('/login')
+        return
       }
+
+      setUser(user)
+
+      // Load arena courses (source = 'arena')
+      const { data: courses, error } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('source', 'arena')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error loading courses:', error)
+      } else {
+        setGeneratedCourses(courses || [])
+        // Get enrolled course IDs from curriculum
+        const { data: enrolled } = await supabase
+          .from('courses')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('source', 'curriculum')
+        
+        if (enrolled) {
+          setEnrolledCourses(enrolled.map(c => c.id))
+        }
+      }
+
+      setLoading(false)
     }
-    window.addEventListener('storage', syncCourses)
-    return () => window.removeEventListener('storage', syncCourses)
-  }, [])
-  
-  // Save generated courses to localStorage whenever they change
-  React.useEffect(() => {
-    localStorage.setItem('arenaCourses', JSON.stringify(generatedCourses))
-  }, [generatedCourses])
+
+    loadData()
+  }, [router, supabase])
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type })
     setTimeout(() => setNotification(null), 3000)
   }
 
-  const handleEnrollCourse = (course) => {
+  const handleEnrollCourse = async (course) => {
+    if (!user) return
+
     // Check if already enrolled
     if (enrolledCourses.includes(course.id)) {
       showNotification('You are already enrolled in this course!', 'warning')
       return
     }
     
-    // Add to enrolled courses (this will be stored in curriculum)
-    setEnrolledCourses(prev => [...prev, course.id])
-    
-    // Store in localStorage for curriculum page to access
-    const existingCurriculum = JSON.parse(localStorage.getItem('curriculumCourses') || '[]')
-    const courseForCurriculum = {
-      ...course,
-      enrolledAt: new Date().toISOString(),
-      source: 'arena'
+    try {
+      // Create a copy of the course in curriculum (source = 'curriculum')
+      const { error } = await supabase
+        .from('courses')
+        .insert({
+          id: course.id,
+          user_id: user.id,
+          title: course.title,
+          description: course.description,
+          topic: course.topic,
+          level: course.level,
+          duration: course.duration,
+          goals: course.goals,
+          content_type: course.content_type || course.contentType,
+          chapters: course.chapters,
+          source: 'curriculum',
+          enrolled_at: new Date().toISOString()
+        })
+
+      if (error) throw error
+
+      setEnrolledCourses(prev => [...prev, course.id])
+      showNotification('Course enrolled successfully! Check your Curriculum page.', 'success')
+    } catch (error) {
+      console.error('Error enrolling course:', error)
+      showNotification('Failed to enroll course. Please try again.', 'error')
     }
-    localStorage.setItem('curriculumCourses', JSON.stringify([...existingCurriculum, courseForCurriculum]))
-    
-    showNotification('Course enrolled successfully! Check your Curriculum page.', 'success')
   }
 
   const handleDeleteCourse = (courseId) => {
     setDeleteConfirm(courseId)
   }
 
-  const confirmDelete = () => {
-    setGeneratedCourses(prev => prev.filter(course => course.id !== deleteConfirm))
-    setEnrolledCourses(prev => prev.filter(id => id !== deleteConfirm))
-    setDeleteConfirm(null)
-    showNotification('Course deleted successfully!', 'success')
+  const confirmDelete = async () => {
+    if (!user || !deleteConfirm) return
+
+    try {
+      // Delete from Supabase
+      const { error } = await supabase
+        .from('courses')
+        .delete()
+        .eq('id', deleteConfirm)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      // Also delete course progress
+      await supabase
+        .from('course_progress')
+        .delete()
+        .eq('course_id', deleteConfirm)
+        .eq('user_id', user.id)
+
+      // Also delete related assignments
+      await supabase
+        .from('assignments')
+        .delete()
+        .eq('course_id', deleteConfirm)
+        .eq('user_id', user.id)
+
+      setGeneratedCourses(prev => prev.filter(course => course.id !== deleteConfirm))
+      setEnrolledCourses(prev => prev.filter(id => id !== deleteConfirm))
+      setDeleteConfirm(null)
+      showNotification('Course deleted successfully!', 'success')
+    } catch (error) {
+      console.error('Error deleting course:', error)
+      showNotification('Failed to delete course. Please try again.', 'error')
+    }
   }
 
   const handleGenerateAICourse = async () => {
@@ -262,28 +335,34 @@ IMPORTANT:
         )
       }
 
-      // Always append to localStorage, never overwrite
-      const storedCourses = localStorage.getItem('arenaCourses')
-      const prevCourses = storedCourses ? JSON.parse(storedCourses) : []
-
-      const newCourse = {
-        id: Date.now().toString(),
-        title: courseData.courseTitle || aiCourseData.topic,
-        description: courseData.description,
-        level: aiCourseData.level,
-        duration: aiCourseData.duration,
-        chapters: enrichedChapters || [],
-        numChapters: numChapters,
-        contentType: aiCourseData.contentType,
-        goals: aiCourseData.goals,
-        createdAt: new Date().toLocaleDateString(),
-        progress: 0,
-        status: 'active'
+      if (!user) {
+        showNotification('Please log in to generate courses', 'error')
+        return
       }
 
-      const updatedCourses = [newCourse, ...prevCourses]
-      setGeneratedCourses(updatedCourses)
-      localStorage.setItem('arenaCourses', JSON.stringify(updatedCourses))
+      const courseId = Date.now().toString()
+      const newCourse = {
+        id: courseId,
+        user_id: user.id,
+        title: courseData.courseTitle || aiCourseData.topic,
+        description: courseData.description,
+        topic: aiCourseData.topic,
+        level: aiCourseData.level,
+        duration: aiCourseData.duration,
+        goals: aiCourseData.goals,
+        content_type: aiCourseData.contentType,
+        chapters: enrichedChapters || [],
+        source: 'arena'
+      }
+
+      // Save to Supabase
+      const { error } = await supabase
+        .from('courses')
+        .insert(newCourse)
+
+      if (error) throw error
+
+      setGeneratedCourses(prev => [newCourse, ...prev])
       setShowAIModal(false)
       showNotification('Course generated successfully with AI!', 'success')
 
@@ -309,18 +388,6 @@ IMPORTANT:
       case 'text': return <FileText className="w-4 h-4" />
       default: return <Sparkles className="w-4 h-4" />
     }
-  
-  // When confirming delete, also update localStorage
-  const confirmDelete = () => {
-    setGeneratedCourses(prev => {
-      const updated = prev.filter(course => course.id !== deleteConfirm)
-      localStorage.setItem('arenaCourses', JSON.stringify(updated))
-      return updated
-    })
-    setEnrolledCourses(prev => prev.filter(id => id !== deleteConfirm))
-    setDeleteConfirm(null)
-    showNotification('Course deleted successfully!', 'success')
-  }
   }
 
   const getContentTypeLabel = (type) => {
@@ -329,6 +396,16 @@ IMPORTANT:
       case 'text': return 'Text-based'
       default: return 'Mixed Content'
     }
+  }
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   // Get course chapters for preview

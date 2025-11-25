@@ -24,6 +24,7 @@ import {
 
 export default function DashboardLayout({ children }) {
   const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showProfileDropdown, setShowProfileDropdown] = useState(false)
   const [sidebarMinimized, setSidebarMinimized] = useState(false)
@@ -41,6 +42,15 @@ export default function DashboardLayout({ children }) {
       }
 
       setUser(user)
+
+      // Fetch profile from profiles table
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      setProfile(profileData)
       setLoading(false)
     }
 
@@ -288,19 +298,19 @@ export default function DashboardLayout({ children }) {
                   onClick={() => setShowProfileDropdown(!showProfileDropdown)}
                   className="flex items-center gap-3 hover:bg-gray-100 rounded-lg px-3 py-2"
                 >
-                  {user?.user_metadata?.avatar_url ? (
+                  {profile?.avatar_url ? (
                     <img
-                      src={user.user_metadata.avatar_url}
+                      src={profile.avatar_url}
                       alt="Profile"
                       className="w-8 h-8 rounded-full object-cover border-2 border-gray-200"
                     />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center text-white text-sm font-semibold">
-                      {user?.user_metadata?.full_name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
+                      {profile?.full_name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
                     </div>
                   )}
                   <div className="text-left">
-                    <p className="font-medium text-sm">{user?.user_metadata?.full_name || 'User'}</p>
+                    <p className="font-medium text-sm">{profile?.full_name || 'User'}</p>
                     <p className="text-xs text-gray-500">View Profile</p>
                   </div>
                   <ChevronDown size={16} className={`text-gray-500 transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`} />

@@ -25,6 +25,7 @@ import {
 export default function DashboardPage() {
   const [averageQuizScore, setAverageQuizScore] = useState(null)
   const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const [currentDate, setCurrentDate] = useState(new Date()) // Current date instead of Dec 2021
@@ -39,26 +40,7 @@ export default function DashboardPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    // Calculate average quiz score from completed assignments using saved quizResult
-    const storedAssignments = localStorage.getItem('assignments')
-    if (storedAssignments) {
-      const assignments = JSON.parse(storedAssignments)
-      const completedWithQuiz = assignments.filter(a => a.status === 'completed' && a.quizResult && typeof a.quizResult.score === 'number' && typeof a.quizResult.total === 'number')
-      let totalScore = 0
-      let totalQuestions = 0
-      completedWithQuiz.forEach(a => {
-        totalScore += a.quizResult.score
-        totalQuestions += a.quizResult.total
-      })
-      if (totalQuestions > 0) {
-        setAverageQuizScore(Math.round((totalScore / totalQuestions) * 100))
-      } else {
-        setAverageQuizScore(null)
-      }
-    } else {
-      setAverageQuizScore(null)
-    }
-    const getUser = async () => {
+    const loadData = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       
       if (!user) {
@@ -67,20 +49,64 @@ export default function DashboardPage() {
       }
 
       setUser(user)
+
+      // Fetch profile from profiles table
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      setProfile(profileData)
+
+      // Calculate average quiz score from completed assignments
+      const { data: assignments } = await supabase
+        .from('assignments')
+        .select('quiz_result')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .not('quiz_result', 'is', null)
+
+      if (assignments && assignments.length > 0) {
+        const completedWithQuiz = assignments.filter(a => 
+          a.quiz_result && 
+          typeof a.quiz_result.score === 'number' && 
+          typeof a.quiz_result.total === 'number'
+        )
+        let totalScore = 0
+        let totalQuestions = 0
+        completedWithQuiz.forEach(a => {
+          totalScore += a.quiz_result.score
+          totalQuestions += a.quiz_result.total
+        })
+        if (totalQuestions > 0) {
+          setAverageQuizScore(Math.round((totalScore / totalQuestions) * 100))
+        } else {
+          setAverageQuizScore(null)
+        }
+      } else {
+        setAverageQuizScore(null)
+      }
+
+      // Load courses from curriculum
+      const { data: courses } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('source', 'curriculum')
+        .order('enrolled_at', { ascending: false })
+        .limit(3)
+
+      if (courses) {
+        setRecentCourses(courses)
+      }
+
       setLoading(false)
     }
 
-    getUser()
-    
-    // Load courses from curriculum
-    const storedCurriculum = localStorage.getItem('curriculumCourses')
-    if (storedCurriculum) {
-      const courses = JSON.parse(storedCurriculum)
-      // Get top 3 recent courses
-      setRecentCourses(courses.slice(0, 3))
-    }
+    loadData()
 
-    // Load todos from localStorage
+    // Load todos from localStorage (keeping this as localStorage for now, can migrate later if needed)
     const storedTodos = localStorage.getItem('dashboardTodos')
     if (storedTodos) {
       setTodos(JSON.parse(storedTodos))
@@ -474,20 +500,20 @@ export default function DashboardPage() {
               {/* Profile Card */}
               <div className="bg-white rounded-2xl p-6 shadow-sm text-center">
                 <div className="relative inline-block mb-4">
-                  {user?.user_metadata?.avatar_url ? (
+                  {profile?.avatar_url ? (
                     <img
-                      src={user.user_metadata.avatar_url}
+                      src={profile.avatar_url}
                       alt="Profile"
                       className="w-24 h-24 rounded-full mx-auto object-cover"
                     />
                   ) : (
                     <div className="w-24 h-24 bg-gradient-to-br from-slate-500 to-slate-700 rounded-full mx-auto flex items-center justify-center text-white text-3xl font-semibold">
-                      {user?.user_metadata?.full_name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
+                      {profile?.full_name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
                     </div>
                   )}
                   <div className="absolute bottom-0 right-0 w-6 h-6 bg-green-500 rounded-full border-4 border-white"></div>
                 </div>
-                <h3 className="font-semibold text-lg text-gray-900">{user?.user_metadata?.full_name || user?.email || 'User'}</h3>
+                <h3 className="font-semibold text-lg text-gray-900">{profile?.full_name || user?.email || 'User'}</h3>
                 <p className="text-sm text-gray-500">College Student</p>
               </div>
 

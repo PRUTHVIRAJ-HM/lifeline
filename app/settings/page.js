@@ -645,15 +645,68 @@ export default function SettingsPage() {
       }
 
       setUser(user)
-      setProfileData({
-        fullName: user.user_metadata?.full_name || '',
-        email: user.email || '',
-        bio: user.user_metadata?.bio || '',
-        location: user.user_metadata?.location || '',
-        portfolioLink: user.user_metadata?.portfolioLink || '',
-        linkedinProfile: user.user_metadata?.linkedinProfile || ''
-      })
-      setAvatarUrl(user.user_metadata?.avatar_url || '')
+
+      // Fetch profile from profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Error fetching profile:', profileError)
+      }
+
+      // If profile doesn't exist, create it
+      if (!profile) {
+        const { data: newProfile, error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email,
+            full_name: user.user_metadata?.full_name || '',
+            avatar_url: user.user_metadata?.avatar_url || ''
+          })
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('Error creating profile:', insertError)
+        } else {
+          setProfileData({
+            fullName: newProfile.full_name || '',
+            email: newProfile.email || user.email || '',
+            bio: newProfile.bio || '',
+            location: newProfile.location || '',
+            portfolioLink: newProfile.portfolio_link || '',
+            linkedinProfile: newProfile.linkedin_profile || ''
+          })
+          setAvatarUrl(newProfile.avatar_url || '')
+          if (newProfile.notifications) {
+            setNotifications(newProfile.notifications)
+          }
+          if (newProfile.preferences) {
+            setPreferences(newProfile.preferences)
+          }
+        }
+      } else {
+        setProfileData({
+          fullName: profile.full_name || '',
+          email: profile.email || user.email || '',
+          bio: profile.bio || '',
+          location: profile.location || '',
+          portfolioLink: profile.portfolio_link || '',
+          linkedinProfile: profile.linkedin_profile || ''
+        })
+        setAvatarUrl(profile.avatar_url || '')
+        if (profile.notifications) {
+          setNotifications(profile.notifications)
+        }
+        if (profile.preferences) {
+          setPreferences(profile.preferences)
+        }
+      }
+
       setLoading(false)
     }
 
@@ -684,10 +737,10 @@ export default function SettingsPage() {
         return
       }
 
-      // Create a unique filename
+      // Create a unique filename with user-specific folder
       const fileExt = file.name.split('.').pop()
-      const fileName = `${user.id}-${Math.random()}.${fileExt}`
-      const filePath = `avatars/${fileName}`
+      const fileName = `avatar-${Date.now()}.${fileExt}`
+      const filePath = `${user.id}/${fileName}`
 
       // Upload to Supabase Storage
       const { error: uploadError, data } = await supabase.storage
@@ -701,12 +754,18 @@ export default function SettingsPage() {
         .from('avatars')
         .getPublicUrl(filePath)
 
-      // Update user metadata with avatar URL
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: { avatar_url: publicUrl }
-      })
+      // Update profile in profiles table
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id)
 
       if (updateError) throw updateError
+
+      // Also update user metadata for backward compatibility
+      await supabase.auth.updateUser({
+        data: { avatar_url: publicUrl }
+      })
 
       setAvatarUrl(publicUrl)
       setMessage({ type: 'success', text: 'Profile picture updated successfully!' })
@@ -724,22 +783,29 @@ export default function SettingsPage() {
     setMessage({ type: '', text: '' })
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        data: {
+      // Update profile in profiles table
+      const { error } = await supabase
+        .from('profiles')
+        .update({
           full_name: profileData.fullName,
           bio: profileData.bio,
           location: profileData.location,
-          portfolioLink: profileData.portfolioLink,
-          linkedinProfile: profileData.linkedinProfile,
-          avatar_url: avatarUrl
-        }
-      })
+          portfolio_link: profileData.portfolioLink,
+          linkedin_profile: profileData.linkedinProfile,
+          avatar_url: avatarUrl,
+          email: profileData.email
+        })
+        .eq('id', user.id)
 
       if (error) throw error
 
-      // Refresh user data
-      const { data: { user: updatedUser } } = await supabase.auth.getUser()
-      setUser(updatedUser)
+      // Also update user metadata for backward compatibility
+      await supabase.auth.updateUser({
+        data: {
+          full_name: profileData.fullName,
+          avatar_url: avatarUrl
+        }
+      })
 
       setMessage({ type: 'success', text: 'Profile updated successfully!' })
     } catch (error) {
@@ -788,9 +854,11 @@ export default function SettingsPage() {
     setMessage({ type: '', text: '' })
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        data: { notifications }
-      })
+      // Update notifications in profiles table
+      const { error } = await supabase
+        .from('profiles')
+        .update({ notifications })
+        .eq('id', user.id)
 
       if (error) throw error
 
@@ -808,9 +876,11 @@ export default function SettingsPage() {
     setMessage({ type: '', text: '' })
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        data: { preferences }
-      })
+      // Update preferences in profiles table
+      const { error } = await supabase
+        .from('profiles')
+        .update({ preferences })
+        .eq('id', user.id)
 
       if (error) throw error
 

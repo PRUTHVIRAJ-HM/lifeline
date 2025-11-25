@@ -29,25 +29,34 @@ import {
 } from 'lucide-react'
 
 export default function CurriculumPage() {
-  // Get course progress from localStorage
-  const getCourseProgress = (courseId, chapters) => {
-    const completed = localStorage.getItem(`completed_${courseId}`)
-    if (!completed || !chapters) return 0
-    const completedLessons = JSON.parse(completed)
-    const totalLessons = chapters.reduce((acc, chapter) => acc + (chapter.lessons?.length || 0), 0)
-    if (totalLessons === 0) return 0
-    return Math.round((completedLessons.length / totalLessons) * 100)
-  }
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [arenaCourses, setArenaCourses] = useState([])
+  const [courseProgress, setCourseProgress] = useState({}) // { courseId: progress }
+  const [notification, setNotification] = useState(null)
   const router = useRouter()
   const supabase = createClient()
 
+  const showNotification = (message, type = 'success') => {
+    setNotification({ message, type })
+    setTimeout(() => setNotification(null), 3000)
+  }
+
+  // Get course progress from Supabase
+  const getCourseProgress = (courseId, chapters) => {
+    const progress = courseProgress[courseId]
+    if (progress !== undefined) return progress
+    
+    // Calculate from chapters if no progress data
+    if (!chapters) return 0
+    const totalLessons = chapters.reduce((acc, chapter) => acc + (chapter.lessons?.length || 0), 0)
+    return totalLessons === 0 ? 0 : 0
+  }
+
   useEffect(() => {
-    const getUser = async () => {
+    const loadData = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       
       if (!user) {
@@ -56,15 +65,51 @@ export default function CurriculumPage() {
       }
 
       setUser(user)
+
+      // Load enrolled courses (source = 'curriculum')
+      const { data: courses, error: coursesError } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('source', 'curriculum')
+        .order('enrolled_at', { ascending: false })
+
+      if (coursesError) {
+        console.error('Error loading courses:', coursesError)
+      } else {
+        setArenaCourses(courses || [])
+      }
+
+      // Load course progress for all courses
+      if (courses && courses.length > 0) {
+        const courseIds = courses.map(c => c.id)
+        const { data: progressData, error: progressError } = await supabase
+          .from('course_progress')
+          .select('*')
+          .eq('user_id', user.id)
+          .in('course_id', courseIds)
+
+        if (!progressError && progressData) {
+          const progressMap = {}
+          progressData.forEach(p => {
+            const course = courses.find(c => c.id === p.course_id)
+            if (course && course.chapters) {
+              const totalLessons = course.chapters.reduce((acc, chapter) => 
+                acc + (chapter.lessons?.length || 0), 0)
+              const completedCount = Array.isArray(p.completed_lessons) ? p.completed_lessons.length : 0
+              progressMap[p.course_id] = totalLessons > 0 
+                ? Math.round((completedCount / totalLessons) * 100)
+                : 0
+            }
+          })
+          setCourseProgress(progressMap)
+        }
+      }
+
       setLoading(false)
     }
 
-    getUser()
-    
-    const storedCurriculum = localStorage.getItem('curriculumCourses')
-    if (storedCurriculum) {
-      setArenaCourses(JSON.parse(storedCurriculum))
-    }
+    loadData()
   }, [router, supabase])
 
   const categories = [
@@ -127,15 +172,45 @@ export default function CurriculumPage() {
   return (
     <DashboardLayout>
       <div className="p-8">
+        {notification && (
+          <div className={`mb-4 p-4 rounded-lg ${
+            notification.type === 'success' 
+              ? 'bg-green-50 text-green-800 border border-green-200' 
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+            {notification.message}
+          </div>
+        )}
         <h1 className="text-3xl font-bold mb-8">My Curriculum</h1>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filteredCourses.map((course) => {
             const Icon = course.icon
             const progress = getCourseProgress(course.id, course.chapters)
             const actionLabel = progress === 0 ? 'Start' : 'Continue'
-            const handleReset = () => {
-              localStorage.removeItem(`completed_${course.id}`)
-              window.location.reload()
+            const handleReset = async () => {
+              if (!user) return
+              
+              try {
+                // Delete course progress
+                await supabase
+                  .from('course_progress')
+                  .delete()
+                  .eq('user_id', user.id)
+                  .eq('course_id', course.id)
+
+                // Update local state
+                setCourseProgress(prev => {
+                  const updated = { ...prev }
+                  delete updated[course.id]
+                  return updated
+                })
+                
+                showNotification('Course progress reset successfully!', 'success')
+                window.location.reload()
+              } catch (error) {
+                console.error('Error resetting progress:', error)
+                showNotification('Failed to reset progress', 'error')
+              }
             }
             return (
               <div 
