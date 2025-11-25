@@ -34,6 +34,7 @@ export default function CourseDetailPage() {
   const [currentLesson, setCurrentLesson] = useState(null)
   const [completedLessons, setCompletedLessons] = useState([])
   const [readModal, setReadModal] = useState({ open: false, chapterIndex: null, lessonIndex: null })
+  const [notification, setNotification] = useState({ show: false, message: '', type: '' })
 
   // Helper to render the read modal
   const renderReadModal = () => {
@@ -198,11 +199,13 @@ export default function CourseDetailPage() {
       </div>
     );
   }
-  // Modal for reading lesson content
-  const [readModal, setReadModal] = useState({ open: false, chapterIndex: null, lessonIndex: null })
-  // Remove course from curriculum
+
   const handleDropout = async () => {
     if (!user) return
+
+    if (!confirm('Are you sure you want to drop this course? This will remove all progress and assignments.')) {
+      return
+    }
 
     try {
       // Delete course from curriculum (source = 'curriculum')
@@ -235,13 +238,6 @@ export default function CourseDetailPage() {
       alert('Failed to drop course. Please try again.')
     }
   }
-  const params = useParams()
-  const router = useRouter()
-  const [course, setCourse] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [expandedChapter, setExpandedChapter] = useState(0)
-  const [currentLesson, setCurrentLesson] = useState(null)
-  const [completedLessons, setCompletedLessons] = useState([])
 
   useEffect(() => {
     const loadData = async () => {
@@ -313,8 +309,11 @@ export default function CourseDetailPage() {
     if (!currentLesson || !user || !course) return
     
     const lessonId = `${currentLesson.chapterIndex}-${currentLesson.lessonIndex}`
+    const updated = completedLessons.includes(lessonId) 
+      ? completedLessons 
+      : [...completedLessons, lessonId]
+    
     if (!completedLessons.includes(lessonId)) {
-      const updated = [...completedLessons, lessonId]
       setCompletedLessons(updated)
 
       // Update progress in Supabase
@@ -342,28 +341,61 @@ export default function CourseDetailPage() {
       }
     }
 
-    // Check if this is the last lesson of the chapter
+    // Check if all lessons in chapter are completed
     const currentChapter = course.chapters[currentLesson.chapterIndex]
-    const isLastLessonOfChapter = currentLesson.lessonIndex === currentChapter.lessons.length - 1
-    if (isLastLessonOfChapter) {
+    const chapterLessonsCompleted = currentChapter.lessons.every((_, idx) => {
+      const chapterLessonId = `${currentLesson.chapterIndex}-${idx}`
+      return updated.includes(chapterLessonId)
+    })
+    
+    if (chapterLessonsCompleted) {
       // Create assignment for this chapter in Supabase
       try {
-        const { error } = await supabase
+        // Check if assignment already exists for this chapter
+        const { data: existingAssignment } = await supabase
           .from('assignments')
-          .insert({
-            user_id: user.id,
-            course_id: course.id,
-            course_title: course.title,
-            chapter_index: currentLesson.chapterIndex,
-            chapter_title: currentChapter.title,
-            description: `Assignment for ${course.title} - Chapter ${currentLesson.chapterIndex + 1}: ${currentChapter.title}`,
-            status: 'pending',
-            quizzes: []
-          })
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('course_id', course.id)
+          .eq('chapter_index', currentLesson.chapterIndex)
+          .single()
 
-        if (error) throw error
+        if (!existingAssignment) {
+          const { error } = await supabase
+            .from('assignments')
+            .insert({
+              user_id: user.id,
+              course: course.title, // For display in assignment card
+              course_id: course.id,
+              course_title: course.title,
+              chapter_index: currentLesson.chapterIndex,
+              chapter_title: currentChapter.title,
+              title: `${currentChapter.title} - Quiz`,
+              description: `Complete the quiz for ${currentChapter.title}`,
+              status: 'pending',
+              priority: 'high',
+              due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 days from now
+              quizzes: []
+            })
+
+          if (error) throw error
+          
+          // Show success notification
+          setNotification({
+            show: true,
+            message: `🎉 Chapter completed! Assignment created for "${currentChapter.title}"`,
+            type: 'success'
+          })
+          setTimeout(() => setNotification({ show: false, message: '', type: '' }), 5000)
+        }
       } catch (error) {
         console.error('Error creating assignment:', error)
+        setNotification({
+          show: true,
+          message: 'Failed to create assignment. Please try again.',
+          type: 'error'
+        })
+        setTimeout(() => setNotification({ show: false, message: '', type: '' }), 5000)
       }
     }
 
@@ -452,6 +484,30 @@ export default function CourseDetailPage() {
 
   return (
     <DashboardLayout>
+      {/* Notification Toast */}
+      {notification.show && (
+        <div className="fixed top-4 right-4 z-50 animate-slide-in">
+          <div className={`px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 ${
+            notification.type === 'success' 
+              ? 'bg-green-500 text-white' 
+              : 'bg-red-500 text-white'
+          }`}>
+            {notification.type === 'success' ? (
+              <CheckCircle size={24} />
+            ) : (
+              <X size={24} />
+            )}
+            <span className="font-medium">{notification.message}</span>
+            <button
+              onClick={() => setNotification({ show: false, message: '', type: '' })}
+              className="ml-2 hover:opacity-75"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+      )}
+      
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <div className="bg-white border-b border-gray-200">

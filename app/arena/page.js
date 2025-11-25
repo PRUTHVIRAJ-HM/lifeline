@@ -103,11 +103,14 @@ export default function ArenaPage() {
     }
     
     try {
+      // Generate a unique ID for the enrolled course (user_id + course_id + timestamp)
+      const enrolledCourseId = `${user.id}-${course.id}-${Date.now()}`
+      
       // Create a copy of the course in curriculum (source = 'curriculum')
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('courses')
         .insert({
-          id: course.id,
+          id: enrolledCourseId,
           user_id: user.id,
           title: course.title,
           description: course.description,
@@ -120,10 +123,18 @@ export default function ArenaPage() {
           source: 'curriculum',
           enrolled_at: new Date().toISOString()
         })
+        .select()
+        .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('Supabase enrollment error:', error)
+        throw error
+      }
 
-      setEnrolledCourses(prev => [...prev, course.id])
+      // Use the original course ID for tracking enrollment
+      if (data) {
+        setEnrolledCourses(prev => [...prev, course.id])
+      }
       showNotification('Course enrolled successfully! Check your Curriculum page.', 'success')
     } catch (error) {
       console.error('Error enrolling course:', error)

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { updateUserScore } from '@/lib/scoring'
 import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/DashboardLayout'
 import { 
@@ -59,12 +60,37 @@ export default function AssignmentPage() {
       }
 
       setUser(user)
-      loadAssignments()
       setLoading(false)
     }
 
     getUser()
   }, [router, supabase])
+
+  // Separate effect for loading assignments when user is available
+  useEffect(() => {
+    if (!user) return
+
+    loadAssignments()
+
+    // Refresh assignments when page becomes visible (user switches back to tab)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadAssignments()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Auto-refresh every 10 seconds to catch new assignments
+    const refreshInterval = setInterval(() => {
+      loadAssignments()
+    }, 10000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      clearInterval(refreshInterval)
+    }
+  }, [user])
 
   const loadAssignments = async () => {
     if (!user) return
@@ -82,7 +108,7 @@ export default function AssignmentPage() {
       const transformed = (data || []).map(a => ({
         id: a.id,
         title: a.title,
-        course: a.course,
+        course: a.course || a.course_title, // Fallback to course_title if course is null
         courseId: a.course_id,
         courseTitle: a.course_title,
         chapterIndex: a.chapter_index,
@@ -451,6 +477,9 @@ Requirements:
           alert('Failed to save quiz result')
           return
         }
+
+        // Update user's score in leaderboard
+        await updateUserScore(user.id)
       }
 
       // Reload assignments to get updated data

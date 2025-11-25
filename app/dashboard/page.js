@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/DashboardLayout'
+import Leaderboard from '@/components/Leaderboard'
+import { getUserRank } from '@/lib/scoring'
 import { 
   BookOpen,
   FileText,
@@ -19,7 +21,9 @@ import {
   Palette,
   Video,
   Plus,
-  Trash2
+  Trash2,
+  Trophy,
+  Award
 } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -36,6 +40,9 @@ export default function DashboardPage() {
   const [newTodoTime, setNewTodoTime] = useState('')
   const [newTodoDate, setNewTodoDate] = useState('')
   const [showAddTodo, setShowAddTodo] = useState(false)
+  const [totalTimeToday, setTotalTimeToday] = useState(0) // Total time today in seconds
+  const [weeklySessionData, setWeeklySessionData] = useState([])
+  const [userScore, setUserScore] = useState(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -106,46 +113,143 @@ export default function DashboardPage() {
 
     loadData()
 
-    // Load todos from localStorage (keeping this as localStorage for now, can migrate later if needed)
-    const storedTodos = localStorage.getItem('dashboardTodos')
-    if (storedTodos) {
-      setTodos(JSON.parse(storedTodos))
-    } else {
-      // Start with empty todos
-      setTodos([])
+    // Load todos from Supabase instead of localStorage
+    const loadTodos = async () => {
+      if (!user) return
+      const { data, error } = await supabase
+        .from('todos')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      if (!error && data) {
+        setTodos(data)
+      }
+    }
+    loadTodos()
+
+    // Load today's session time from Supabase
+    if (user) {
+      const today = new Date().toISOString().split('T')[0]
+      supabase
+        .from('profiles')
+        .select('session_data')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (data?.session_data) {
+            // Set today's time
+            if (data.session_data[today]) {
+              setTotalTimeToday(data.session_data[today])
+            }
+
+            // Get last 5 days for graph
+            const last5Days = []
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            
+            for (let i = 4; i >= 0; i--) {
+              const date = new Date()
+              date.setDate(date.getDate() - i)
+              const dateStr = date.toISOString().split('T')[0]
+              const timeInSeconds = data.session_data[dateStr] || 0
+              const hours = Math.round(timeInSeconds / 3600) // Convert to hours
+              
+              last5Days.push({
+                month: monthNames[date.getMonth()],
+                day: date.getDate(),
+                study: hours,
+                exams: 0 // Can be used later for quiz/test time tracking
+              })
+            }
+            
+            setWeeklySessionData(last5Days)
+          }
+        })
     }
   }, [router, supabase])
 
-  // Save todos to localStorage whenever they change
-  const saveTodos = (updatedTodos) => {
-    setTodos(updatedTodos)
-    localStorage.setItem('dashboardTodos', JSON.stringify(updatedTodos))
-  }
+  // Load session data for Hours Spent graph
+  useEffect(() => {
+    if (!user) return
 
-  // Toggle todo completion
-  const toggleTodo = (id) => {
-    const updatedTodos = todos.map(todo =>
-      todo.id === id ? { ...todo, completed: !todo.completed } : todo
-    )
-    saveTodos(updatedTodos)
-  }
+    const loadSessionData = async () => {
+      const today = new Date()
+      const last5Days = []
+      
+      for (let i = 4; i >= 0; i--) {
+        const date = new Date(today)
+        date.setDate(date.getDate() - i)
+        last5Days.push(date.toISOString().split('T')[0])
+      }
 
-  // Add new todo
-  const addTodo = async () => {
-    if (!newTodoTitle.trim()) return
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('session_data')
+        .eq('id', user.id)
+        .single()
 
-    const newTodo = {
-      id: Date.now(),
-      title: newTodoTitle.trim(),
-      category: newTodoCategory.trim(),
-      time: newTodoTime.trim(),
-      date: newTodoDate.trim(),
-      completed: false
+      const sessionData = profileData?.session_data || {}
+      const todayTotal = sessionData[last5Days[4]] || 0
+      setTotalTimeToday(todayTotal)
+
+      const weekData = last5Days.map((date, index) => ({
+        day: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        study: (sessionData[date] || 0) / 3600 // Convert seconds to hours
+      }))
+
+      setWeeklySessionData(weekData)
     }
 
-    saveTodos([...todos, newTodo])
-    
-    // Add to Google Calendar if date and time are provided
+    loadSessionData()
+    // Refresh data every minute to show updates
+    const refreshInterval = setInterval(loadSessionData, 60000)
+
+    return () => clearInterval(refreshInterval)
+  }, [user, supabase])
+
+  // Load user score for leaderboard
+  useEffect(() => {
+    if (!user) return
+
+    const loadUserScore = async () => {
+      const { success, data } = await getUserRank(user.id)
+      if (success) {
+        setUserScore(data) // data can be null if user has no scores yet
+      }
+    }
+
+    loadUserScore()
+    // Refresh score every 30 seconds
+    const scoreInterval = setInterval(loadUserScore, 30000)
+
+    return () => clearInterval(scoreInterval)
+  }, [user])
+
+  // Load todos helper reused (needed for realtime & CRUD refresh)
+  const reloadTodos = async () => {
+    if (!user) return
+    const { data, error } = await supabase
+      .from('todos')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+    if (!error && data) setTodos(data)
+  }
+
+  // Add new todo (persist to Supabase)
+  const addTodo = async () => {
+    if (!newTodoTitle.trim() || !user) return
+    const insertPayload = {
+      user_id: user.id,
+      title: newTodoTitle.trim(),
+      category: newTodoCategory.trim() || null,
+      due_date: newTodoDate ? newTodoDate : null
+    }
+    const { error } = await supabase.from('todos').insert(insertPayload)
+    if (error) {
+      console.error('Failed to insert todo:', error)
+      return
+    }
+    // Optional: calendar integration kept if date & time provided
     if (newTodoDate && newTodoTime) {
       try {
         await fetch('/api/calendar', {
@@ -162,19 +266,56 @@ export default function DashboardPage() {
         console.error('Failed to add to calendar:', error)
       }
     }
-    
     setNewTodoTitle('')
     setNewTodoCategory('')
     setNewTodoTime('')
     setNewTodoDate('')
     setShowAddTodo(false)
+    reloadTodos()
   }
 
-  // Delete todo
-  const deleteTodo = (id) => {
-    const updatedTodos = todos.filter(todo => todo.id !== id)
-    saveTodos(updatedTodos)
+  // Toggle completion (update is_completed)
+  const toggleTodo = async (id, current) => {
+    const { error } = await supabase
+      .from('todos')
+      .update({ is_completed: !current, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('user_id', user?.id)
+    if (error) {
+      console.error('Failed to toggle todo:', error)
+      return
+    }
+    // Optimistic update
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, is_completed: !current } : t))
   }
+
+  // Delete todo (Supabase row)
+  const deleteTodo = async (id) => {
+    const { error } = await supabase
+      .from('todos')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user?.id)
+    if (error) {
+      console.error('Failed to delete todo:', error)
+      return
+    }
+    setTodos(prev => prev.filter(t => t.id !== id))
+  }
+
+  // Realtime subscription for this user's todos
+  useEffect(() => {
+    if (!user) return
+    const channel = supabase
+      .channel('todos-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'todos', filter: `user_id=eq.${user.id}` }, () => {
+        reloadTodos()
+      })
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -255,11 +396,6 @@ export default function DashboardPage() {
     { month: 'May', study: 15, exams: 0 }
   ]
 
-  const leaderboard = [
-    { rank: 1, name: 'Charlie Rawal', avatar: '👤', courses: 53, hours: 250, points: 13450, trend: 'up' },
-    { rank: 2, name: 'Ariana Agarwal', avatar: '👤', courses: 88, hours: 212, points: 10333, trend: 'down' }
-  ]
-
   const getDaysInMonth = (date) => {
     const year = date.getFullYear()
     const month = date.getMonth()
@@ -276,8 +412,24 @@ export default function DashboardPage() {
     return days
   }
 
+  const formatTime = (seconds) => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`
+    }
+    return `${minutes}m`
+  }
+
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                       'July', 'August', 'September', 'October', 'November', 'December']
+
+  // Manual refresh for score/rank
+  const refreshUserScore = async () => {
+    if (!user) return
+    const { success, data } = await getUserRank(user.id)
+    if (success) setUserScore(data)
+  }
 
   return (
     <DashboardLayout>
@@ -349,8 +501,41 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Hours Spent */}
                 <div className="bg-white rounded-2xl p-6 shadow-sm">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-6">Hours Spent</h2>
-                  <div className="flex gap-4 mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-gray-900">Hours Spent</h2>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">Today</p>
+                      <p className="text-sm font-semibold text-[#FF8A65]">{formatTime(totalTimeToday)}</p>
+                    </div>
+                  </div>
+                  <div className="relative h-64">
+                    <div className="absolute inset-0 flex items-end justify-between gap-2">
+                      {(weeklySessionData.length > 0 ? weeklySessionData : [
+                        { month: 'Jan', day: 1, study: 0, exams: 0 },
+                        { month: 'Jan', day: 2, study: 0, exams: 0 },
+                        { month: 'Jan', day: 3, study: 0, exams: 0 },
+                        { month: 'Jan', day: 4, study: 0, exams: 0 },
+                        { month: 'Jan', day: 5, study: 0, exams: 0 }
+                      ]).map((data, index) => (
+                        <div key={index} className="flex-1 flex flex-col items-center justify-end gap-1 relative">
+                          <div className="w-full flex flex-col items-center gap-1">
+                            {data.exams > 0 && (
+                              <div 
+                                className="w-full bg-[#FFE0B2] rounded-t-lg"
+                                style={{ height: `${Math.max(data.exams * 20, 8)}px` }}
+                              ></div>
+                            )}
+                            <div 
+                              className={`w-full bg-[#FF8A65] ${data.exams === 0 ? 'rounded-t-lg' : ''}`}
+                              style={{ height: `${Math.max(data.study * 20, data.study > 0 ? 8 : 0)}px` }}
+                            ></div>
+                          </div>
+                          <span className="text-xs text-gray-500 mt-2">{data.month} {data.day}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-4 mt-6">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-[#FF8A65] rounded"></div>
                       <span className="text-sm text-gray-600">Study</span>
@@ -359,41 +544,6 @@ export default function DashboardPage() {
                       <div className="w-3 h-3 bg-[#FFE0B2] rounded"></div>
                       <span className="text-sm text-gray-600">Exams</span>
                     </div>
-                  </div>
-                  <div className="relative h-64">
-                    <div className="absolute inset-0 flex items-end justify-between gap-2">
-                      {studyData.map((data, index) => (
-                        <div key={index} className="flex-1 flex flex-col items-center justify-end gap-1 relative">
-                          <div className="w-full flex flex-col items-center gap-1">
-                            {data.exams > 0 && (
-                              <div 
-                                className="w-full bg-[#2C3544] rounded-t-lg relative"
-                                style={{ height: `${data.exams * 2}px` }}
-                              >
-                                {index === 3 && (
-                                  <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-[#2C3544] text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                    <div>🔥 55 Hr</div>
-                                    <div>📚 32 Hr</div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            <div 
-                              className={`w-full bg-[#FF8A65] ${data.exams === 0 ? 'rounded-t-lg' : ''}`}
-                              style={{ height: `${data.study * 2}px` }}
-                            ></div>
-                          </div>
-                          <span className="text-xs text-gray-500 mt-2">{data.month}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-400 mt-2">
-                    <span>0 Hr</span>
-                    <span>20 Hr</span>
-                    <span>40 Hr</span>
-                    <span>60 Hr</span>
-                    <span>80 Hr</span>
                   </div>
                 </div>
 
@@ -449,50 +599,8 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Leader Board */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm">
-                <h2 className="text-lg font-semibold text-gray-900 mb-6">Leader Board</h2>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="text-left text-sm text-gray-500 border-b">
-                        <th className="pb-3 font-medium">RANK</th>
-                        <th className="pb-3 font-medium">NAME</th>
-                        <th className="pb-3 font-medium">COURSE</th>
-                        <th className="pb-3 font-medium">HOUR</th>
-                        <th className="pb-3 font-medium">POINT</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaderboard.map((leader) => (
-                        <tr key={leader.rank} className="border-b last:border-b-0">
-                          <td className="py-4">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{leader.rank}</span>
-                              {leader.trend === 'up' ? (
-                                <TrendingUp size={16} className="text-green-500" />
-                              ) : (
-                                <TrendingDown size={16} className="text-red-500" />
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-lg">
-                                {leader.avatar}
-                              </div>
-                              <span className="font-medium">{leader.name}</span>
-                            </div>
-                          </td>
-                          <td className="py-4 text-gray-600">{leader.courses}</td>
-                          <td className="py-4 text-gray-600">{leader.hours}</td>
-                          <td className="py-4 text-[#4DB6AC] font-semibold">{leader.points.toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              {/* Leaderboard - Dynamic */}
+              <Leaderboard userId={user?.id} showTop={10} />
             </div>
 
             {/* Right Column - Sidebar */}
@@ -558,6 +666,51 @@ export default function DashboardPage() {
                   })}
                 </div>
               </div>
+
+              {/* Score Card */}
+              {userScore && (
+                <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-2xl p-6 shadow-sm border-2 border-orange-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-lg text-gray-900">Your Score</h3>
+                      <Trophy className="w-6 h-6 text-orange-500" />
+                    </div>
+                    <button
+                      onClick={refreshUserScore}
+                      className="text-xs px-2 py-1 rounded-md bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium transition"
+                      title="Refresh score"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="text-center mb-4">
+                    <p className="text-4xl font-bold text-orange-600 mb-1">{userScore.total_score}</p>
+                    <p className="text-sm text-gray-600">Total Points</p>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 mb-4 pb-4 border-b border-orange-200">
+                    <Award className="w-5 h-5 text-orange-500" />
+                    <span className="text-lg font-semibold text-gray-700">Rank #{userScore.effective_rank || userScore.dynamic_rank || userScore.rank || 1}</span>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Assignments</span>
+                      <span className="font-semibold text-gray-900">{userScore.assignments_completed}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Perfect Scores</span>
+                      <span className="font-semibold text-yellow-600">{userScore.perfect_scores}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Current Streak</span>
+                      <span className="font-semibold text-blue-600">{userScore.current_streak} days</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Bonus Points</span>
+                      <span className="font-semibold text-green-600">+{userScore.bonus_points}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* To Do List */}
               <div className="bg-white rounded-2xl p-6 shadow-sm">
@@ -636,28 +789,25 @@ export default function DashboardPage() {
                       <div key={todo.id} className="flex items-start gap-3 group">
                         <button 
                           className="mt-0.5 flex-shrink-0"
-                          onClick={() => toggleTodo(todo.id)}
+                          onClick={() => toggleTodo(todo.id, todo.is_completed)}
                         >
-                          {todo.completed ? (
+                          {todo.is_completed ? (
                             <CheckCircle2 size={20} className="text-[#4DB6AC]" />
                           ) : (
                             <Circle size={20} className="text-gray-300 hover:text-gray-400" />
                           )}
                         </button>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm break-words ${todo.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                          <p className={`text-sm break-words ${todo.is_completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
                             {todo.title}
                           </p>
-                          {(todo.category || todo.time || todo.date) && (
+                          {(todo.category || todo.due_date) && (
                             <div className="flex flex-wrap items-center gap-2 mt-1">
                               {todo.category && (
                                 <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{todo.category}</span>
                               )}
-                              {todo.date && (
-                                <span className="text-xs text-blue-600">{new Date(todo.date).toLocaleDateString()}</span>
-                              )}
-                              {todo.time && (
-                                <span className="text-xs text-orange-500">{todo.time}</span>
+                              {todo.due_date && (
+                                <span className="text-xs text-blue-600">{new Date(todo.due_date).toLocaleDateString()}</span>
                               )}
                             </div>
                           )}

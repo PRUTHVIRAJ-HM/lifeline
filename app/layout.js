@@ -1,5 +1,6 @@
 import { Poppins } from "next/font/google";
 import "./globals.css";
+import SessionTracker from "@/components/SessionTracker";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -18,6 +19,7 @@ export default function RootLayout({ children }) {
       <body
         className={`${poppins.variable} antialiased`}
       >
+        <SessionTracker />
         {children}
       </body>
     </html>
