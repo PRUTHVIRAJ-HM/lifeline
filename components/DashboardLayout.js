@@ -271,7 +271,7 @@ export default function DashboardLayout({ children }) {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                Hello {user?.user_metadata?.full_name || 'there'} 
+                Hello {profile?.full_name || 'there'} 
               </h1>
               <p className="text-gray-500 text-sm">Let's learn something new today!</p>
             </div>

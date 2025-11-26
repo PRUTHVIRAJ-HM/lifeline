@@ -20,7 +20,9 @@ import {
   Mic,
   MoreVertical,
   ChevronDown,
-  Sparkles
+  Sparkles,
+  Trash2,
+  Copy
 } from 'lucide-react'
 
 export default function CognixAssistPage() {
@@ -34,6 +36,8 @@ export default function CognixAssistPage() {
   const [recognition, setRecognition] = useState(null)
   const [researchMode, setResearchMode] = useState('quick') // 'quick' or 'deep'
   const [showModeDropdown, setShowModeDropdown] = useState(false)
+    const [showOptionsMenu, setShowOptionsMenu] = useState(false)
+    const [copiedKey, setCopiedKey] = useState(null)
   const router = useRouter()
   const supabase = createClient()
   const messagesEndRef = useRef(null)
@@ -239,6 +243,43 @@ export default function CognixAssistPage() {
     setMessages([])
     setCurrentSessionId(null)
     setInputMessage('')
+  }
+
+  // Delete only current chat session
+  const clearAllHistory = async () => {
+    if (!user) return
+    if (!currentSessionId) {
+      // Unsaved/new chat: just clear local messages
+      const confirmedNew = confirm('Clear this unsaved chat?')
+      if (!confirmedNew) return
+      setMessages([])
+      setInputMessage('')
+      return
+    }
+    const confirmed = confirm('Delete this chat permanently? This cannot be undone.')
+    if (!confirmed) return
+    try {
+      const { error } = await supabase
+        .from('chat_sessions')
+        .delete()
+        .eq('id', currentSessionId)
+      if (error) throw error
+      setChatHistory(prev => prev.filter(s => s.id !== currentSessionId))
+      setMessages([])
+      setCurrentSessionId(null)
+      setInputMessage('')
+    } catch (error) {
+      console.error('Error deleting chat session:', error)
+      alert('Failed to delete this chat. Please try again.')
+    }
+  }
+
+  const copyMessage = (text, key) => {
+    if (!text) return
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key)
+      setTimeout(() => setCopiedKey(null), 2000)
+    }).catch(err => console.error('Clipboard copy failed:', err))
   }
 
   const scrollToBottom = () => {
@@ -473,10 +514,6 @@ export default function CognixAssistPage() {
 
         {/* Community */}
         <div className="px-4 mb-4">
-          <button className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-700">
-            <Users size={20} />
-            <span>Community</span>
-          </button>
         </div>
 
         {/* Recent Chats */}
@@ -541,9 +578,28 @@ export default function CognixAssistPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              <div className="relative">
+                <button 
+                  onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
                 <MoreVertical size={24} />
-              </button>
+                </button>
+                {showOptionsMenu && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                    <button
+                      onClick={() => {
+                        clearAllHistory()
+                        setShowOptionsMenu(false)
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2 hover:bg-red-50 text-red-600 transition-colors"
+                    >
+                      <Trash2 size={18} />
+                      <span>Delete This Chat</span>
+                    </button>
+                  </div>
+                )}
+              </div>
               <button className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
                 <span className="text-gray-600 font-semibold">
                   {user?.user_metadata?.full_name?.charAt(0).toUpperCase() || 'U'}
@@ -589,110 +645,121 @@ export default function CognixAssistPage() {
             </div>
           ) : (
             <div className="max-w-4xl mx-auto px-8 py-6">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`mb-6 flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
+              {messages.map((message, idx) => (
+                <div key={message.id}>
                   <div
-                    className={`max-w-3xl rounded-2xl px-6 py-4 ${
-                      message.sender === 'user'
-                        ? 'bg-gray-900 text-white'
-                        : 'bg-gray-100 text-gray-900'
-                    }`}
+                    className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
-                    {message.sender === 'user' ? (
-                      <p className="leading-relaxed whitespace-pre-wrap">{message.text}</p>
-                    ) : (
-                      <div className="prose prose-sm max-w-none prose-pre:bg-gray-800 prose-pre:text-gray-100 prose-code:text-blue-600 prose-headings:text-gray-900">
-                        <ReactMarkdown 
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[rehypeHighlight]}
-                          components={{
-                            code: ({node, inline, className, children, ...props}) => {
-                              const match = /language-(\w+)/.exec(className || '')
-                              return !inline ? (
-                                <code className={className} {...props}>
+                    <div
+                      className={`max-w-3xl rounded-2xl px-6 py-4 ${
+                        message.sender === 'user'
+                          ? 'bg-gray-900 text-white'
+                          : 'bg-gray-100 text-gray-900'
+                      }`}
+                    >
+                      {message.sender === 'user' ? (
+                        <p className="leading-relaxed whitespace-pre-wrap">{message.text}</p>
+                      ) : (
+                        <div className="prose prose-sm max-w-none prose-pre:bg-gray-800 prose-pre:text-gray-100 prose-code:text-blue-600 prose-headings:text-gray-900">
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeHighlight]}
+                            components={{
+                              code: ({node, inline, className, children, ...props}) => {
+                                const match = /language-(\w+)/.exec(className || '')
+                                return !inline ? (
+                                  <code className={className} {...props}>
+                                    {children}
+                                  </code>
+                                ) : (
+                                  <code className="bg-gray-200 text-blue-600 px-1 py-0.5 rounded text-sm" {...props}>
+                                    {children}
+                                  </code>
+                                )
+                              },
+                              pre: ({children, ...props}) => (
+                                <pre className="bg-gray-800 text-gray-100 rounded-lg p-4 overflow-x-auto my-4" {...props}>
                                   {children}
-                                </code>
-                              ) : (
-                                <code className="bg-gray-200 text-blue-600 px-1 py-0.5 rounded text-sm" {...props}>
+                                </pre>
+                              ),
+                              table: ({children, ...props}) => (
+                                <div className="overflow-x-auto my-6">
+                                  <table className="min-w-full border-collapse border border-gray-300 rounded-lg" {...props}>
+                                    {children}
+                                  </table>
+                                </div>
+                              ),
+                              thead: ({children, ...props}) => (
+                                <thead className="bg-gray-800 text-white" {...props}>
                                   {children}
-                                </code>
-                              )
-                            },
-                            pre: ({children, ...props}) => (
-                              <pre className="bg-gray-800 text-gray-100 rounded-lg p-4 overflow-x-auto my-4" {...props}>
-                                {children}
-                              </pre>
-                            ),
-                            table: ({children, ...props}) => (
-                              <div className="overflow-x-auto my-6">
-                                <table className="min-w-full border-collapse border border-gray-300 rounded-lg" {...props}>
+                                </thead>
+                              ),
+                              tbody: ({children, ...props}) => (
+                                <tbody className="bg-white" {...props}>
                                   {children}
-                                </table>
-                              </div>
-                            ),
-                            thead: ({children, ...props}) => (
-                              <thead className="bg-gray-800 text-white" {...props}>
-                                {children}
-                              </thead>
-                            ),
-                            tbody: ({children, ...props}) => (
-                              <tbody className="bg-white" {...props}>
-                                {children}
-                              </tbody>
-                            ),
-                            tr: ({children, ...props}) => (
-                              <tr className="border-b border-gray-200 hover:bg-gray-50" {...props}>
-                                {children}
-                              </tr>
-                            ),
-                            th: ({children, ...props}) => (
-                              <th className="px-4 py-3 text-left text-sm font-semibold border-r border-gray-600 last:border-r-0" {...props}>
-                                {children}
-                              </th>
-                            ),
-                            td: ({children, ...props}) => (
-                              <td className="px-4 py-3 text-sm border-r border-gray-200 last:border-r-0" {...props}>
-                                {children}
-                              </td>
-                            ),
-                            h1: ({children, ...props}) => (
-                              <h1 className="text-2xl font-bold mb-4 mt-6" {...props}>{children}</h1>
-                            ),
-                            h2: ({children, ...props}) => (
-                              <h2 className="text-xl font-bold mb-3 mt-5" {...props}>{children}</h2>
-                            ),
-                            h3: ({children, ...props}) => (
-                              <h3 className="text-lg font-semibold mb-2 mt-4" {...props}>{children}</h3>
-                            ),
-                            ul: ({children, ...props}) => (
-                              <ul className="list-disc list-inside mb-4 space-y-1" {...props}>{children}</ul>
-                            ),
-                            ol: ({children, ...props}) => (
-                              <ol className="list-decimal list-inside mb-4 space-y-1" {...props}>{children}</ol>
-                            ),
-                            p: ({children, ...props}) => (
-                              <p className="mb-3 leading-relaxed" {...props}>{children}</p>
-                            ),
-                            blockquote: ({children, ...props}) => (
-                              <blockquote className="border-l-4 border-gray-300 pl-4 italic my-4" {...props}>
-                                {children}
-                              </blockquote>
-                            ),
-                            a: ({children, ...props}) => (
-                              <a className="text-blue-600 hover:underline" {...props}>{children}</a>
-                            ),
-                          }}
-                        >
-                          {message.text}
-                        </ReactMarkdown>
-                        {message.isStreaming && (
-                          <span className="inline-block w-2 h-4 ml-1 bg-gray-900 animate-pulse"></span>
-                        )}
-                      </div>
-                    )}
+                                </tbody>
+                              ),
+                              tr: ({children, ...props}) => (
+                                <tr className="border-b border-gray-200 hover:bg-gray-50" {...props}>
+                                  {children}
+                                </tr>
+                              ),
+                              th: ({children, ...props}) => (
+                                <th className="px-4 py-3 text-left text-sm font-semibold border-r border-gray-600 last:border-r-0" {...props}>
+                                  {children}
+                                </th>
+                              ),
+                              td: ({children, ...props}) => (
+                                <td className="px-4 py-3 text-sm border-r border-gray-200 last:border-r-0" {...props}>
+                                  {children}
+                                </td>
+                              ),
+                              h1: ({children, ...props}) => (
+                                <h1 className="text-2xl font-bold mb-4 mt-6" {...props}>{children}</h1>
+                              ),
+                              h2: ({children, ...props}) => (
+                                <h2 className="text-xl font-bold mb-3 mt-5" {...props}>{children}</h2>
+                              ),
+                              h3: ({children, ...props}) => (
+                                <h3 className="text-lg font-semibold mb-2 mt-4" {...props}>{children}</h3>
+                              ),
+                              ul: ({children, ...props}) => (
+                                <ul className="list-disc list-inside mb-4 space-y-1" {...props}>{children}</ul>
+                              ),
+                              ol: ({children, ...props}) => (
+                                <ol className="list-decimal list-inside mb-4 space-y-1" {...props}>{children}</ol>
+                              ),
+                              p: ({children, ...props}) => (
+                                <p className="mb-3 leading-relaxed" {...props}>{children}</p>
+                              ),
+                              blockquote: ({children, ...props}) => (
+                                <blockquote className="border-l-4 border-gray-300 pl-4 italic my-4" {...props}>
+                                  {children}
+                                </blockquote>
+                              ),
+                              a: ({children, ...props}) => (
+                                <a className="text-blue-600 hover:underline" {...props}>{children}</a>
+                              ),
+                            }}
+                          >
+                            {message.text}
+                          </ReactMarkdown>
+                          {message.isStreaming && (
+                            <span className="inline-block w-2 h-4 ml-1 bg-gray-900 animate-pulse"></span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'} mt-1 mb-6`}>
+                    <button
+                      onClick={() => copyMessage(message.text, message.id || `${message.sender}-${idx}`)}
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${message.sender === 'user' ? 'text-gray-300 hover:text-white hover:bg-gray-800/70' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'}`}
+                      type="button"
+                    >
+                      <Copy size={14} />
+                      {copiedKey === (message.id || `${message.sender}-${idx}`) ? 'Copied!' : 'Copy'}
+                    </button>
                   </div>
                 </div>
               ))}

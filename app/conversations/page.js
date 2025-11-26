@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/DashboardLayout'
@@ -23,7 +23,10 @@ import {
   MicOff,
   VideoOff,
   Monitor,
-  Users
+  Users,
+  Download,
+  File,
+  Trash2
 } from 'lucide-react'
 
 export default function ConversationsPage() {
@@ -38,6 +41,14 @@ export default function ConversationsPage() {
   const [isScreenSharing, setIsScreenSharing] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const [peopleSearch, setPeopleSearch] = useState('')
+  const [peopleResults, setPeopleResults] = useState([])
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [isTyping, setIsTyping] = useState(false)
+  const messagesEndRef = useRef(null)
+  const typingTimeoutRef = useRef(null)
+  const [showChatOptions, setShowChatOptions] = useState(null)
 
   useEffect(() => {
     const getUser = async () => {
@@ -55,74 +66,169 @@ export default function ConversationsPage() {
     getUser()
   }, [router, supabase])
 
-  // Mock conversations data
-  const conversations = [
-    {
-      id: 1,
-      name: 'Sarah Johnson',
-      avatar: 'SJ',
-      lastMessage: 'Hey! Did you finish the assignment?',
-      timestamp: '2m ago',
-      unread: 2,
-      online: true,
-      type: 'direct'
-    },
-    {
-      id: 2,
-      name: 'Web Dev Study Group',
-      avatar: '👥',
-      lastMessage: 'John: The meeting is at 3 PM',
-      timestamp: '15m ago',
-      unread: 0,
-      online: false,
-      type: 'group',
-      members: 8
-    },
-    {
-      id: 3,
-      name: 'Michael Chen',
-      avatar: 'MC',
-      lastMessage: 'Thanks for the notes!',
-      timestamp: '1h ago',
-      unread: 0,
-      online: true,
-      type: 'direct'
-    },
-    {
-      id: 4,
-      name: 'Emily Rodriguez',
-      avatar: 'ER',
-      lastMessage: 'Can we schedule a video call?',
-      timestamp: '3h ago',
-      unread: 1,
-      online: false,
-      type: 'direct'
-    },
-    {
-      id: 5,
-      name: 'UI/UX Designers',
-      avatar: '🎨',
-      lastMessage: 'New design resources shared',
-      timestamp: '5h ago',
-      unread: 0,
-      online: false,
-      type: 'group',
-      members: 12
-    },
-    {
-      id: 6,
-      name: 'Dr. Lisa Wang',
-      avatar: 'LW',
-      lastMessage: 'Assignment deadline extended',
-      timestamp: '1d ago',
-      unread: 0,
-      online: false,
-      type: 'direct'
-    }
-  ]
+  // Conversations from Supabase
+  const [conversations, setConversations] = useState([])
 
   // Realtime chat state
   const [messages, setMessages] = useState([])
+  // Load user conversations and subscribe to new memberships
+  useEffect(() => {
+    if (!user) return
+    let membershipChannel
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('chat_members')
+        .select(`
+          chat_id,
+          chats:chat_id (id, type, title, created_at, created_by)
+        `)
+        .eq('user_id', user.id)
+      if (!error && data) {
+        // Fetch other user profiles for direct chats
+        const normalized = await Promise.all(data.map(async (d) => {
+          let chatName = d.chats?.title || (d.chats?.type === 'group' ? 'Group Chat' : 'Direct Chat')
+          let chatAvatar = (d.chats?.title || 'C').slice(0, 2).toUpperCase()
+          
+          // For direct chats, get the other user's name
+          if (d.chats?.type === 'direct') {
+            // First get the other user's ID
+            const { data: otherMember } = await supabase
+              .from('chat_members')
+              .select('user_id')
+              .eq('chat_id', d.chat_id)
+              .neq('user_id', user.id)
+              .maybeSingle()
+            
+            // Then get their profile
+            if (otherMember?.user_id) {
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('full_name, avatar_url')
+                .eq('id', otherMember.user_id)
+                .maybeSingle()
+              
+              if (profile?.full_name) {
+                chatName = profile.full_name
+                chatAvatar = profile.full_name.slice(0, 2).toUpperCase()
+              }
+            }
+          }
+          
+          return {
+            id: d.chat_id,
+            name: chatName,
+            avatar: chatAvatar,
+            type: d.chats?.type || 'direct',
+            created_by: d.chats?.created_by || null,
+            lastMessage: '',
+            timestamp: '',
+            unread: 0,
+            online: false
+          }
+        }))
+        setConversations(normalized)
+      }
+
+      membershipChannel = supabase
+        .channel('public:chat_members')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'chat_members', filter: `user_id=eq.${user.id}` },
+          async (payload) => {
+            const { data: chat } = await supabase
+              .from('chats')
+              .select('*')
+              .eq('id', payload.new.chat_id)
+              .maybeSingle()
+            if (chat) {
+              let chatName = chat.title || (chat.type === 'group' ? 'Group Chat' : 'Direct Chat')
+              let chatAvatar = (chat.title || 'C').slice(0, 2).toUpperCase()
+              
+              // For direct chats, get the other user's name
+              if (chat.type === 'direct') {
+                // First get the other user's ID
+                const { data: otherMember } = await supabase
+                  .from('chat_members')
+                  .select('user_id')
+                  .eq('chat_id', chat.id)
+                  .neq('user_id', user.id)
+                  .maybeSingle()
+                
+                // Then get their profile
+                if (otherMember?.user_id) {
+                  const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('full_name, avatar_url')
+                    .eq('id', otherMember.user_id)
+                    .maybeSingle()
+                  
+                  if (profile?.full_name) {
+                    chatName = profile.full_name
+                    chatAvatar = profile.full_name.slice(0, 2).toUpperCase()
+                  }
+                }
+              }
+              
+              setConversations(prev => {
+                if (prev.find(c => c.id === chat.id)) return prev
+                return [...prev, {
+                  id: chat.id,
+                  name: chatName,
+                  avatar: chatAvatar,
+                  type: chat.type,
+                  created_by: chat.created_by || null,
+                  lastMessage: '',
+                  timestamp: '',
+                  unread: 0,
+                  online: false
+                }]
+              })
+            }
+          }
+        )
+        .subscribe()
+    })()
+
+    return () => { if (membershipChannel) supabase.removeChannel(membershipChannel) }
+  }, [user, supabase])
+
+  // People search
+  useEffect(() => {
+    if (!user) return
+    let active = true
+    ;(async () => {
+      if (!peopleSearch.trim()) {
+        setPeopleResults([])
+        return
+      }
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, avatar_url')
+        .neq('id', user.id)
+        .ilike('full_name', `%${peopleSearch}%`)
+        .order('full_name', { ascending: true })
+        .limit(25)
+      
+      if (error) console.error('People search error:', error)
+      if (!error && active) setPeopleResults(data || [])
+    })()
+    return () => { active = false }
+  }, [peopleSearch, user, supabase])
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setShowChatOptions(null)
+    if (showChatOptions) {
+      document.addEventListener('click', handleClickOutside)
+      return () => document.removeEventListener('click', handleClickOutside)
+    }
+  }, [showChatOptions])
 
   // Fetch initial messages and subscribe to realtime updates
   useEffect(() => {
@@ -135,18 +241,22 @@ export default function ConversationsPage() {
         .select('*')
         .eq('chat_id', selectedChat.id)
         .order('created_at', { ascending: true })
-      if (!error && data) setMessages(data)
+      if (!error && data) {
+        setMessages(data)
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+      }
     }
     fetchMessages()
 
-    // Subscribe to new messages
+    // Subscribe to new messages and typing indicators
     subscription = supabase
-      .channel('public:messages')
+      .channel(`chat:${selectedChat.id}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${selectedChat.id}` },
         (payload) => {
           setMessages((prev) => [...prev, payload.new])
+          setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
         }
       )
       .subscribe()
@@ -154,18 +264,84 @@ export default function ConversationsPage() {
     return () => {
       if (subscription) supabase.removeChannel(subscription)
     }
-  }, [selectedChat, supabase])
+  }, [selectedChat, supabase, user])
 
   // Send message to Supabase
   const handleSendMessage = async () => {
     if (!messageInput.trim()) return
+    setIsTyping(false)
     await supabase.from('messages').insert({
       chat_id: selectedChat.id,
       sender_id: user.id,
-      text: messageInput,
-      created_at: new Date().toISOString()
+      text: messageInput
     })
     setMessageInput('')
+  }
+
+  // Handle typing indicator
+  const handleTyping = (value) => {
+    setMessageInput(value)
+    if (!selectedChat) return
+    
+    setIsTyping(true)
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false)
+    }, 1000)
+  }
+
+  // Handle file upload
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file || !selectedChat || !user) return
+
+    setUploadingFile(true)
+    setUploadProgress(0)
+
+    try {
+      // Upload to Supabase storage
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`
+      const filePath = `${selectedChat.id}/${fileName}`
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('chat-files')
+        .upload(filePath, file, {
+          onUploadProgress: (progress) => {
+            const percent = (progress.loaded / progress.total) * 100
+            setUploadProgress(Math.round(percent))
+          }
+        })
+
+      if (uploadError) throw uploadError
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-files')
+        .getPublicUrl(filePath)
+
+      // Send message with file
+      await supabase.from('messages').insert({
+        chat_id: selectedChat.id,
+        sender_id: user.id,
+        text: messageInput.trim() || null,
+        file_url: publicUrl,
+        file_name: file.name,
+        file_type: file.type,
+        file_size: file.size
+      })
+
+      setMessageInput('')
+      setUploadProgress(0)
+    } catch (error) {
+      console.error('File upload error:', error)
+      alert('Failed to upload file. Please try again.')
+    } finally {
+      setUploadingFile(false)
+      e.target.value = ''
+    }
   }
 
   const handleVideoCall = () => {
@@ -179,9 +355,118 @@ export default function ConversationsPage() {
     setIsScreenSharing(false)
   }
 
+  // Delete chat
+  const deleteChat = async (chatId) => {
+    if (!confirm('Are you sure you want to delete this chat? This will remove all messages and files.')) return
+
+    try {
+      const res = await fetch(`/api/chats/${chatId}/delete`, { method: 'POST' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || 'Delete failed')
+      }
+
+      // Update local state
+      setConversations(prev => prev.filter(c => c.id !== chatId))
+
+      if (selectedChat?.id === chatId) {
+        setSelectedChat(null)
+        setMessages([])
+      }
+
+      setShowChatOptions(null)
+    } catch (error) {
+      console.error('Error deleting chat:', error)
+      alert('Failed to delete chat. Please try again.')
+    }
+  }
+
+  // Leave chat (remove only current user's membership)
+  const leaveChat = async (chatId) => {
+    if (!confirm('Leave this chat? You can be re-added later.')) return
+    try {
+      await supabase.from('chat_members').delete().match({ chat_id: chatId, user_id: user.id })
+      setConversations(prev => prev.filter(c => c.id !== chatId))
+      if (selectedChat?.id === chatId) {
+        setSelectedChat(null)
+        setMessages([])
+      }
+      setShowChatOptions(null)
+    } catch (error) {
+      console.error('Error leaving chat:', error)
+      alert('Failed to leave chat. Please try again.')
+    }
+  }
+
   const filteredConversations = conversations.filter(conv =>
     conv.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  const startDirectChat = async (otherUserId) => {
+    console.log('Starting direct chat with:', otherUserId)
+    if (!user || !otherUserId) {
+      console.error('Missing user or otherUserId')
+      return
+    }
+    
+    // First, get the other user's profile
+    const { data: otherProfile, error: profileErr } = await supabase
+      .from('profiles')
+      .select('full_name, avatar_url')
+      .eq('id', otherUserId)
+      .maybeSingle()
+    
+    console.log('Other profile:', otherProfile, 'Error:', profileErr)
+
+    const chatName = otherProfile?.full_name || 'Direct Chat'
+    const chatAvatar = otherProfile?.full_name?.slice(0, 2).toUpperCase() || 'DC'
+
+    const { data: chat, error: chatErr } = await supabase
+      .from('chats')
+      .insert({ type: 'direct', title: null, created_by: user.id })
+      .select()
+      .maybeSingle()
+    
+    console.log('Chat created:', chat, 'Error:', chatErr)
+    if (chatErr || !chat) {
+      console.error('Failed to create chat:', chatErr)
+      return
+    }
+
+    const { error: memErr } = await supabase
+      .from('chat_members')
+      .insert([
+        { chat_id: chat.id, user_id: user.id, role: 'member' },
+        { chat_id: chat.id, user_id: otherUserId, role: 'member' }
+      ])
+    
+    console.log('Members added, error:', memErr)
+    if (memErr) {
+      console.error('Failed to add members:', memErr)
+      return
+    }
+    if (memErr) return
+
+    const newChat = {
+      id: chat.id,
+      name: chatName,
+      avatar: chatAvatar,
+      type: 'direct',
+      created_by: user.id,
+      lastMessage: '',
+      timestamp: '',
+      unread: 0,
+      online: false
+    }
+
+    setConversations(prev => {
+      if (prev.find(c => c.id === chat.id)) return prev
+      return [...prev, newChat]
+    })
+    
+    // Immediately select the chat
+    setSelectedChat(newChat)
+  }
 
   if (loading) {
     return (
@@ -215,16 +500,51 @@ export default function ConversationsPage() {
             </div>
           </div>
 
+          {/* Find People */}
+          <div className="p-4 border-b border-gray-200">
+            <label className="text-xs font-semibold text-gray-600 mb-2 block">Find people</label>
+            <input
+              type="text"
+              value={peopleSearch}
+              onChange={(e) => setPeopleSearch(e.target.value)}
+              placeholder="Search users…"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#F5C832] focus:border-transparent"
+            />
+            <div className="mt-3 max-h-40 overflow-y-auto space-y-2">
+              {peopleResults.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => startDirectChat(p.id)}
+                  className="w-full flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-semibold text-gray-700">
+                    {(p.full_name || 'U').slice(0,2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 text-left">
+                    <div className="text-sm text-gray-900">{p.full_name || 'User'}</div>
+                    {p.email && <div className="text-xs text-gray-500">{p.email}</div>}
+                  </div>
+                </button>
+              ))}
+              {peopleResults.length === 0 && (
+                <div className="text-xs text-gray-500">No users found</div>
+              )}
+            </div>
+          </div>
+
           {/* Conversations List */}
           <div className="flex-1 overflow-y-auto">
             {filteredConversations.map((conv) => (
-              <button
+              <div
                 key={conv.id}
-                onClick={() => setSelectedChat(conv)}
-                className={`w-full p-4 flex items-start gap-3 hover:bg-gray-50 transition-colors border-b border-gray-100 ${
+                className={`relative w-full p-4 flex items-start gap-3 hover:bg-gray-50 transition-colors border-b border-gray-100 ${
                   selectedChat?.id === conv.id ? 'bg-gray-100' : ''
                 }`}
               >
+                <button
+                  onClick={() => setSelectedChat(conv)}
+                  className="flex-1 flex items-start gap-3"
+                >
                 {/* Avatar */}
                 <div className="relative">
                   <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center font-semibold text-gray-700">
@@ -256,7 +576,49 @@ export default function ConversationsPage() {
                     {conv.unread}
                   </div>
                 )}
-              </button>
+                </button>
+                
+                {/* Options Menu */}
+                <div className="relative">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowChatOptions(showChatOptions === conv.id ? null : conv.id)
+                    }}
+                    className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                  >
+                    <MoreVertical size={16} className="text-gray-500" />
+                  </button>
+                  
+                  {showChatOptions === conv.id && (
+                    <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10 min-w-[120px]">
+                      {conv.created_by === user?.id ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteChat(conv.id)
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-red-600 transition-colors text-sm"
+                        >
+                          <Trash2 size={14} />
+                          <span>Delete</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            leaveChat(conv.id)
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-100 text-gray-700 transition-colors text-sm"
+                        >
+                          <X size={14} />
+                          <span>Leave chat</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -311,16 +673,45 @@ export default function ConversationsPage() {
               {messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`flex ${message.sender_id === user.id ? 'justify-end' : 'justify-start'}`}
+                  className={`flex ${message.sender_id === user.id ? 'justify-end' : 'justify-start'} animate-fadeIn`}
                 >
                   <div
                     className={`max-w-md ${
                       message.sender_id === user.id
                         ? 'bg-gray-900 text-white'
                         : 'bg-white text-gray-900'
-                    } rounded-2xl px-4 py-3 shadow-sm`}
+                    } rounded-2xl px-4 py-3 shadow-sm hover:shadow-md transition-shadow`}
                   >
-                    <p className="text-sm">{message.text}</p>
+                    {message.file_url && (
+                      <div className="mb-2">
+                        {message.file_type?.startsWith('image/') ? (
+                          <img 
+                            src={message.file_url} 
+                            alt={message.file_name}
+                            className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => window.open(message.file_url, '_blank')}
+                          />
+                        ) : (
+                          <a
+                            href={message.file_url}
+                            download={message.file_name}
+                            className={`flex items-center gap-2 p-3 rounded-lg ${
+                              message.sender_id === user.id ? 'bg-gray-800' : 'bg-gray-100'
+                            } hover:opacity-80 transition-opacity`}
+                          >
+                            <File size={20} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{message.file_name}</div>
+                              <div className="text-xs opacity-70">
+                                {message.file_size ? `${(message.file_size / 1024).toFixed(1)} KB` : 'File'}
+                              </div>
+                            </div>
+                            <Download size={18} />
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {message.text && <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>}
                     <div className={`flex items-center justify-end gap-1 mt-1 text-xs ${
                       message.sender_id === user.id ? 'text-gray-400' : 'text-gray-500'
                     }`}>
@@ -329,22 +720,72 @@ export default function ConversationsPage() {
                   </div>
                 </div>
               ))}
+              
+              {/* Typing indicator */}
+              {isTyping && (
+                <div className="flex justify-start animate-fadeIn">
+                  <div className="bg-gray-100 rounded-2xl px-6 py-3 shadow-sm">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Message Input */}
             <div className="bg-white border-t border-gray-200 p-4">
+              {uploadingFile && (
+                <div className="mb-3 px-4 py-2 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm text-gray-600">Uploading file...</span>
+                    <span className="text-sm font-medium text-gray-900">{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-[#F5C832] h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
               <div className="flex items-end gap-3">
-                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <input
+                  type="file"
+                  id="file-upload"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  disabled={uploadingFile}
+                />
+                <label 
+                  htmlFor="file-upload"
+                  className={`p-2 hover:bg-gray-100 rounded-lg transition-colors ${uploadingFile ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
                   <Paperclip size={20} className="text-gray-600" />
-                </button>
-                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                </label>
+                <input
+                  type="file"
+                  id="image-upload"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  disabled={uploadingFile}
+                />
+                <label 
+                  htmlFor="image-upload"
+                  className={`p-2 hover:bg-gray-100 rounded-lg transition-colors ${uploadingFile ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
                   <ImageIcon size={20} className="text-gray-600" />
-                </button>
+                </label>
                 
                 <div className="flex-1 relative">
                   <textarea
                     value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
+                    onChange={(e) => handleTyping(e.target.value)}
                     onKeyPress={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault()
