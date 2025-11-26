@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { 
@@ -14,7 +14,7 @@ import {
   Mic
 } from 'lucide-react'
 
-export default function InterviewPracticePage() {
+function InterviewPracticeContent() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
@@ -393,5 +393,17 @@ export default function InterviewPracticePage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function InterviewPracticePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
+    }>
+      <InterviewPracticeContent />
+    </Suspense>
   )
 }
