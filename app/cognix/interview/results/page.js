@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, TrendingUp, AlertCircle, Lightbulb, Star, Target, Award, BarChart3 } from "lucide-react"
 
-export default function InterviewResultsPage() {
+function InterviewResultsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const field = searchParams.get("field") || "General"
@@ -282,5 +282,17 @@ export default function InterviewResultsPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function InterviewResultsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
+    }>
+      <InterviewResultsContent />
+    </Suspense>
   )
 }
