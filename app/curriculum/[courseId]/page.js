@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import DashboardLayout from '@/components/DashboardLayout'
@@ -23,7 +23,7 @@ import {
   X
 } from 'lucide-react'
 
-export default function CourseDetailPage() {
+function CourseDetailContent() {
   const params = useParams()
   const router = useRouter()
   const supabase = createClient()
@@ -790,5 +790,19 @@ export default function CourseDetailPage() {
   {/* Modal for reading lesson content (text-based courses) */}
   {renderReadModal()}
   </DashboardLayout>
+  )
+}
+
+export default function CourseDetailPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+        </div>
+      </DashboardLayout>
+    }>
+      <CourseDetailContent />
+    </Suspense>
   )
 }

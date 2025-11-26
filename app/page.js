@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-export default function Home() {
+function HomeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -49,5 +49,17 @@ export default function Home() {
     <div className="flex min-h-screen items-center justify-center bg-zinc-50">
       <div className="text-lg">Loading...</div>
     </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50">
+        <div className="text-lg">Loading...</div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   )
 }

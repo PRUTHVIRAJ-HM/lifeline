@@ -59,17 +59,6 @@ export default function CognixPage() {
       route: '/cognix/assist'
     },
     {
-      id: 'briefing',
-      name: 'Cognix Briefing',
-      description: 'Get comprehensive summaries and key insights from your study materials in seconds',
-      icon: FileText,
-      color: 'bg-gradient-to-br from-purple-50 to-purple-100',
-      iconColor: 'text-purple-600',
-      borderColor: 'border-purple-200',
-      features: ['Smart Summaries', 'Key Insights', 'Quick Review'],
-      route: '/cognix/briefing'
-    },
-    {
       id: 'builder',
       name: 'Cognix Builder',
       description: 'Build professional resumes with guided prompts and download them as PDF in minutes',
@@ -182,7 +171,7 @@ export default function CognixPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {cognixProducts.map((product, index) => {
               const Icon = product.icon
               return (
@@ -280,33 +269,6 @@ export default function CognixPage() {
                   <div className="text-sm text-gray-300">AI Support</div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Coming Soon Section */}
-        <div className="max-w-7xl mx-auto px-8 pb-16">
-          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-2 border-yellow-200 rounded-3xl p-12 text-center">
-            <div className="inline-flex items-center space-x-2 bg-white px-6 py-3 rounded-full mb-6 shadow-sm">
-              <Sparkles className="w-5 h-5 text-[#F5C832]" />
-              <span className="text-sm font-bold text-gray-900">Coming Soon</span>
-            </div>
-            
-            <h3 className="text-3xl font-bold text-gray-900 mb-4">
-              More Intelligent Features on the Horizon
-            </h3>
-            
-            <p className="text-gray-700 max-w-2xl mx-auto mb-8 text-lg">
-              We're constantly innovating and developing cutting-edge AI tools to revolutionize your learning experience. 
-              Stay connected for exciting updates!
-            </p>
-
-            <div className="flex flex-wrap gap-3 justify-center">
-              {['AI Tutor', 'Study Planner', 'Skill Assessments', 'Collaborative Learning', 'Voice Assistant'].map((feature, idx) => (
-                <span key={idx} className="px-4 py-2 bg-white rounded-full text-sm font-medium text-gray-700 shadow-sm border border-yellow-200">
-                  {feature}
-                </span>
-              ))}
             </div>
           </div>
         </div>
