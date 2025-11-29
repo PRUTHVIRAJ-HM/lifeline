@@ -907,7 +907,6 @@ export default function SettingsPage() {
 
   const sections = [
     { id: 'profile', name: 'Profile', icon: User },
-    { id: 'security', name: 'Security', icon: Shield },
     { id: 'preferences', name: 'Preferences', icon: SettingsIcon },
     { id: 'diagnostics', name: 'Diagnostics', icon: Activity },
     { id: 'account', name: 'Account', icon: Trash2 },
@@ -1131,98 +1130,6 @@ export default function SettingsPage() {
                       >
                         <Save className="w-4 h-4" />
                         <span>{saving ? 'Saving...' : 'Save Changes'}</span>
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
-
-              {/* Security Section */}
-              {activeSection === 'security' && (
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-8">Security Settings</h2>
-                  
-                  <form onSubmit={handlePasswordUpdate} className="space-y-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Current Password
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showCurrentPassword ? 'text' : 'password'}
-                          value={passwordData.currentPassword}
-                          onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent pr-10"
-                          placeholder="Enter current password"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                        >
-                          {showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        New Password
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showNewPassword ? 'text' : 'password'}
-                          value={passwordData.newPassword}
-                          onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent pr-10"
-                          placeholder="Enter new password"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowNewPassword(!showNewPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                        >
-                          {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Password must be at least 6 characters
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Confirm New Password
-                      </label>
-                      <input
-                        type="password"
-                        value={passwordData.confirmPassword}
-                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                        placeholder="Confirm new password"
-                      />
-                    </div>
-
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <div className="flex items-start space-x-3">
-                        <Shield className="w-5 h-5 text-yellow-600 mt-0.5" />
-                        <div>
-                          <h4 className="font-medium text-yellow-900">Security Notice</h4>
-                          <p className="text-sm text-yellow-700 mt-1">
-                            Changing your password will sign you out of all devices. You'll need to sign in again with your new password.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end pt-4">
-                      <button
-                        type="submit"
-                        disabled={saving}
-                        className="flex items-center space-x-2 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>{saving ? 'Updating...' : 'Update Password'}</span>
                       </button>
                     </div>
                   </form>
