@@ -13,6 +13,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Circle,
+  CircleAlert,
   Filter,
   Search,
   Trash2,
@@ -710,31 +711,14 @@ Requirements:
                         {assignment.quizzes && assignment.quizzes.length > 0 ? (
                           <>
                             <CheckCircle2 size={18} />
-                            Take Quiz
+                            Completed
                           </>
                         ) : (
                           <>
-                            <ClipboardCheck size={18} />
-                            Generate Quiz
+                            <CircleAlert size={18}/>
+                            Take Assigmnent
                           </>
                         )}
-                      </button>
-                      {/* Status dropdown removed. Status is now only shown as a label above. */}
-                      <button
-                        onClick={() => handleEditAssignment(assignment)}
-                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                        title="Edit"
-                        disabled={isCompleted}
-                      >
-                        <Edit size={18} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteAssignment(assignment.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete"
-                        disabled={isCompleted}
-                      >
-                        <Trash2 size={18} />
                       </button>
                     </div>
                   </div>

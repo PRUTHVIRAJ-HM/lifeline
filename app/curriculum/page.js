@@ -171,89 +171,167 @@ export default function CurriculumPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-8">
-        {notification && (
-          <div className={`mb-4 p-4 rounded-lg ${
-            notification.type === 'success' 
-              ? 'bg-green-50 text-green-800 border border-green-200' 
-              : 'bg-red-50 text-red-800 border border-red-200'
-          }`}>
-            {notification.message}
-          </div>
-        )}
-        <h1 className="text-3xl font-bold mb-8">My Curriculum</h1>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {filteredCourses.map((course) => {
-            const Icon = course.icon
-            const progress = getCourseProgress(course.id, course.chapters)
-            const actionLabel = progress === 0 ? 'Start' : 'Continue'
-            const handleReset = async () => {
-              if (!user) return
-              
-              try {
-                // Delete course progress
-                await supabase
-                  .from('course_progress')
-                  .delete()
-                  .eq('user_id', user.id)
-                  .eq('course_id', course.id)
-
-                // Update local state
-                setCourseProgress(prev => {
-                  const updated = { ...prev }
-                  delete updated[course.id]
-                  return updated
-                })
-                
-                showNotification('Course progress reset successfully!', 'success')
-                window.location.reload()
-              } catch (error) {
-                console.error('Error resetting progress:', error)
-                showNotification('Failed to reset progress', 'error')
-              }
-            }
-            return (
-              <div 
-                key={course.id} 
-                className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg hover:border-gray-300 transition-all duration-200"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className={`w-14 h-14 ${course.color} rounded-xl flex items-center justify-center border-2 ${course.borderColor}`}>
-                    <Icon className={course.iconColor} size={28} />
+      <div className="min-h-screen bg-gray-50">
+        {/* Header Section */}
+        <div className="bg-white border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-6 py-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">My Curriculum</h1>
+                <p className="text-gray-600">Continue your learning journey</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-gray-900" />
+                    <div>
+                      <p className="text-sm text-gray-500">Enrolled Courses</p>
+                      <p className="text-2xl font-bold text-gray-900">{allCourses.filter(c => c.enrolled).length}</p>
+                    </div>
                   </div>
-                </div>
-                <h3 className="text-lg font-bold mb-2">{course.title}</h3>
-                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{course.description}</p>
-                <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
-                  <div className="flex items-center gap-1">
-                    <Clock size={14} />
-                    <span>{course.duration}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <BookOpen size={14} />
-                    <span>{course.lessons} lessons</span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition"
-                    onClick={() => router.push(`/curriculum/${course.id}`)}
-                  >
-                    {actionLabel}
-                  </button>
-                  <button
-                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 transition"
-                    onClick={handleReset}
-                  >
-                    Reset
-                  </button>
-                </div>
-                <div className="flex items-center justify-between mt-4">
-                  <span className="text-xs text-gray-500">Progress: {progress}%</span>
                 </div>
               </div>
-            )
-          })}
+            </div>
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search your courses..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Notification */}
+        {notification && (
+          <div className="max-w-7xl mx-auto px-6 pt-6">
+            <div className={`p-4 rounded-xl ${
+              notification.type === 'success' 
+                ? 'bg-green-50 text-green-800 border border-green-200' 
+                : 'bg-red-50 text-red-800 border border-red-200'
+            }`}>
+              {notification.message}
+            </div>
+          </div>
+        )}
+
+        {/* Courses Grid */}
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          {filteredCourses.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No courses found</h3>
+              <p className="text-gray-600 mb-6">Start your learning journey by enrolling in courses from the Arena</p>
+              <button
+                onClick={() => router.push('/arena')}
+                className="px-6 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors font-medium"
+              >
+                Browse Arena
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              {filteredCourses.map((course) => {
+                const Icon = course.icon
+                const progress = getCourseProgress(course.id, course.chapters)
+                const actionLabel = progress === 0 ? 'Start Learning' : 'Continue Learning'
+                
+                const handleReset = async () => {
+                  if (!user) return
+                  
+                  try {
+                    await supabase
+                      .from('course_progress')
+                      .delete()
+                      .eq('user_id', user.id)
+                      .eq('course_id', course.id)
+
+                    setCourseProgress(prev => {
+                      const updated = { ...prev }
+                      delete updated[course.id]
+                      return updated
+                    })
+                    
+                    showNotification('Course progress reset successfully!', 'success')
+                    window.location.reload()
+                  } catch (error) {
+                    console.error('Error resetting progress:', error)
+                    showNotification('Failed to reset progress', 'error')
+                  }
+                }
+
+                return (
+                  <div 
+                    key={course.id} 
+                    className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300 group"
+                  >
+                    {/* Course Header */}
+                    <div className="p-6 border-b border-gray-100">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-14 h-14 bg-[#F5C832] rounded-xl flex items-center justify-center">
+                          <Icon className="text-gray-900" size={28} />
+                        </div>
+                        <span className="bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-full font-medium">
+                          {course.level}
+                        </span>
+                      </div>
+                      
+                      <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-gray-700 transition-colors">
+                        {course.title}
+                      </h3>
+                      <p className="text-sm text-gray-600 line-clamp-2 mb-4">
+                        {course.description}
+                      </p>
+
+                      {/* Stats */}
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <div className="flex items-center gap-1.5">
+                          <Clock size={16} className="text-gray-400" />
+                          <span>{course.duration}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <BookOpen size={16} className="text-gray-400" />
+                          <span>{course.lessons} lessons</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Progress Section */}
+                    <div className="p-6">
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">Progress</span>
+                          <span className="text-sm font-semibold text-gray-900">{progress}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                          <div 
+                            className="bg-gray-900 h-2.5 rounded-full transition-all duration-500"
+                            style={{ width: `${progress}%` }}
+                          ></div>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => router.push(`/curriculum/${course.id}`)}
+                          className="w-full px-4 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
+                        >
+                          {progress === 0 ? <Play size={16} /> : <ChevronRight size={16} />}
+                          {actionLabel}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </DashboardLayout>

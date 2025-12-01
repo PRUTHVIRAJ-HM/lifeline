@@ -84,8 +84,8 @@ export default function DashboardLayout({ children }) {
         {/* Logo */}
         <div className="p-6 border-b border-gray-200">
           <div className={`flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-2'}`}>
-            <div className="w-8 h-8 bg-[#F5C832] rounded-lg flex items-center justify-center text-xl">
-              ✱
+            <div className="w-8 h-8 bg-[#F5C832] rounded-lg flex items-center justify-center text-xl p-1">
+              <img src="/learning.png" alt="Academix Logo" className="w-full h-full object-contain"/>            
             </div>
             {!sidebarMinimized && (
               <span className="text-xl font-bold">Academix</span>
@@ -271,7 +271,7 @@ export default function DashboardLayout({ children }) {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                Hello {profile?.full_name || 'there'} 
+                Hello, {profile?.full_name || 'there'} 
               </h1>
               <p className="text-gray-500 text-sm">Let's learn something new today!</p>
             </div>
@@ -287,11 +287,7 @@ export default function DashboardLayout({ children }) {
                 />
               </div>
 
-              {/* Notifications */}
-              <button className="p-2 hover:bg-gray-100 rounded-lg relative">
-                <Bell size={24} />
-              </button>
-
+             
               {/* Profile Dropdown */}
               <div className="relative">
                 <button 
