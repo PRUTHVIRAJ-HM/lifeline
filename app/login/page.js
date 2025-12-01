@@ -14,11 +14,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const supabase = createClient()
-  // Stable base URL for OAuth redirects. On the client, always use the current origin
-  // so phones/tablets don't get redirected to localhost. Use env only during SSR.
-  const siteUrl = typeof window !== 'undefined'
-    ? window.location.origin
-    : (process.env.NEXT_PUBLIC_SITE_URL || '')
+  // Use production URL from environment variable, fallback to current origin for local development
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 
+    (typeof window !== 'undefined' ? window.location.origin : '')
 
   const handleLogin = async (e) => {
     e.preventDefault()
