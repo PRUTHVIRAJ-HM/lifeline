@@ -308,6 +308,7 @@ export default function ConversationsPage() {
   const [peopleQuery, setPeopleQuery] = useState('')
   const [peopleResults, setPeopleResults] = useState([])
   const [showNewChat, setShowNewChat] = useState(false)
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -502,6 +503,58 @@ export default function ConversationsPage() {
     if (currentCall) {
       await currentCall.leave()
       setCurrentCall(null)
+    }
+  }
+
+  const clearChat = async () => {
+    if (!activeChannel) return
+    const ok = confirm('Clear all messages in this chat? This cannot be undone.')
+    if (!ok) return
+    try {
+      const res = await fetch('/api/stream/channel/truncate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelId: activeChannel.id,
+          channelType: activeChannel.type,
+          hard: false,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'truncate failed')
+      }
+      await activeChannel.watch()
+      setHeaderMenuOpen(false)
+    } catch (e) {
+      console.error('Failed to clear chat:', e)
+      alert('Failed to clear chat. Please try again.')
+    }
+  }
+
+  const deleteChat = async () => {
+    if (!activeChannel) return
+    const ok = confirm('Delete this conversation? This will remove the chat for all members.')
+    if (!ok) return
+    try {
+      const res = await fetch('/api/stream/channel/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelId: activeChannel.id,
+          channelType: activeChannel.type,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'delete failed')
+      }
+      setActiveChannel(null)
+      setHeaderMenuOpen(false)
+      router.refresh()
+    } catch (e) {
+      console.error('Failed to delete chat:', e)
+      alert('Failed to delete chat. Please try again.')
     }
   }
 
@@ -753,25 +806,38 @@ export default function ConversationsPage() {
                         >
                           <Video size={20} className="text-gray-600 group-hover:text-gray-900" />
                         </button>
-                        <button
-                          className="p-2 hover:bg-gray-100 rounded-full transition-all group"
-                          title="Voice call"
-                        >
-                          <Phone size={20} className="text-gray-600 group-hover:text-gray-900" />
-                        </button>
-                        <button 
-                          className="p-2 hover:bg-gray-100 rounded-full transition-all group"
-                          title="Conversation info"
-                        >
-                          <Info size={20} className="text-gray-600 group-hover:text-gray-900" />
-                        </button>
+                        <div className="relative">
+                          <button
+                            onClick={() => setHeaderMenuOpen((v) => !v)}
+                            className="p-2 hover:bg-gray-100 rounded-full transition-all group"
+                            title="More"
+                          >
+                            <MoreVertical size={20} className="text-gray-600 group-hover:text-gray-900" />
+                          </button>
+                          {headerMenuOpen && (
+                            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+                              <button
+                                onClick={clearChat}
+                                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
+                              >
+                                Clear chat
+                              </button>
+                              <button
+                                onClick={deleteChat}
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                              >
+                                Delete chat
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                     
                     {/* Message List */}
                     <MessageList 
                       hideDeletedMessages
-                      messageActions={[]}
+                      messageActions={["quote"]}
                     />
                     
                     {/* Message Input with improved action buttons */}
@@ -785,7 +851,7 @@ export default function ConversationsPage() {
                   </>
                 )}
               </Window>
-              <Thread />
+              {/* Thread UI removed to keep replies inline */}
             </Channel>
           </div>
         </Chat>
