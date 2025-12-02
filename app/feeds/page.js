@@ -74,7 +74,7 @@ export default function FeedsPage() {
       try {
         setLoading(true)
         setError(null)
-        const response = await fetch('https://nonmalicious-ungeodetically-neymar.ngrok-free.dev/api/articles')
+        const response = await fetch('https://spider-bay-six.vercel.app/api/articles')
         
         if (!response.ok) {
           throw new Error('Failed to fetch articles')
