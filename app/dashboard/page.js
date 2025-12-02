@@ -726,42 +726,46 @@ export default function DashboardPage() {
                 </div>
 
                 {showAddTodo && (
-                  <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+                  <div className="mb-4 p-4 bg-gray-50 rounded-xl space-y-3 border border-gray-200">
                     <input
                       type="text"
-                      placeholder="Todo title..."
+                      placeholder="What do you need to do?"
                       value={newTodoTitle}
                       onChange={(e) => setNewTodoTitle(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                       onKeyPress={(e) => e.key === 'Enter' && addTodo()}
                     />
                     <input
                       type="text"
-                      placeholder="Category (optional)"
+                      placeholder="Category (e.g., Study, Work, Personal)"
                       value={newTodoCategory}
                       onChange={(e) => setNewTodoCategory(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                     />
-                    <div className="flex gap-2">
-                      <input
-                        type="date"
-                        placeholder="Date"
-                        value={newTodoDate}
-                        onChange={(e) => setNewTodoDate(e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      />
-                      <input
-                        type="time"
-                        placeholder="Time"
-                        value={newTodoTime}
-                        onChange={(e) => setNewTodoTime(e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="relative">
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Due Date</label>
+                        <input
+                          type="date"
+                          value={newTodoDate}
+                          onChange={(e) => setNewTodoDate(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                        />
+                      </div>
+                      <div className="relative">
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Time</label>
+                        <input
+                          type="time"
+                          value={newTodoTime}
+                          onChange={(e) => setNewTodoTime(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                        />
+                      </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 pt-2">
                       <button
                         onClick={addTodo}
-                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+                        className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition text-sm font-semibold"
                       >
                         Add Todo
                       </button>
@@ -773,7 +777,7 @@ export default function DashboardPage() {
                           setNewTodoTime('')
                           setNewTodoDate('')
                         }}
-                        className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm font-medium"
+                        className="flex-1 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition text-sm font-semibold"
                       >
                         Cancel
                       </button>

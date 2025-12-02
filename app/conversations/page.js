@@ -17,7 +17,14 @@ import {
   Info,
   Hash,
   AtSign,
-  UserPlus
+  UserPlus,
+  PhoneOff,
+  Mic,
+  MicOff,
+  VideoOff,
+  Volume2,
+  VolumeX,
+  MonitorUp
 } from 'lucide-react'
 import { Chat, Channel, ChannelHeader, MessageInput, MessageList, Thread, Window, ChannelList } from 'stream-chat-react'
 import { getStreamChatClient, getStreamVideoClient, disconnectStreamClients } from '@/lib/stream/client'
@@ -110,25 +117,63 @@ function CustomChannelPreview({ channel, setActiveChannel, activeChannel }) {
 }
 
 // Video Call Component
-function VideoCallUI({ call, onEndCall }) {
+function VideoCallUI({ call, onEndCall, otherUser }) {
   const { useCallCallingState, useParticipantCount } = useCallStateHooks();
   const callingState = useCallCallingState();
   const participantCount = useParticipantCount();
+  
+  const [isMicOn, setIsMicOn] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(true);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+
+  const toggleMic = async () => {
+    await call.microphone.toggle();
+    setIsMicOn(!isMicOn);
+  };
+
+  const toggleCamera = async () => {
+    await call.camera.toggle();
+    setIsCameraOn(!isCameraOn);
+  };
+
+  const toggleSpeaker = () => {
+    setIsSpeakerOn(!isSpeakerOn);
+  };
+
+  const toggleScreenShare = async () => {
+    try {
+      if (isScreenSharing) {
+        await call.stopPublish('screenShareTrack');
+        setIsScreenSharing(false);
+      } else {
+        await call.screenShare.toggle();
+        setIsScreenSharing(true);
+      }
+    } catch (error) {
+      console.error('Screen share error:', error);
+      alert('Failed to share screen. Please try again.');
+    }
+  };
 
   return (
     <StreamTheme>
       <div className="fixed inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-black z-50 flex flex-col">
         {/* Video Area */}
         <div className="flex-1 relative">
-          <SpeakerLayout />
+          <SpeakerLayout participantsBarPosition="bottom" />
           
           {/* Call Info */}
           <div className="absolute top-6 left-6 bg-black/70 backdrop-blur-md rounded-xl px-5 py-3 shadow-2xl border border-gray-700">
             <div className="flex items-center gap-3 text-white">
               <div className="w-3 h-3 bg-gradient-to-r from-red-500 to-red-600 rounded-full animate-pulse shadow-lg shadow-red-500/50"></div>
               <div>
-                <div className="text-xs text-gray-400 font-medium">Live Call</div>
-                <div className="text-sm font-bold">{participantCount} participant{participantCount !== 1 ? 's' : ''}</div>
+                <div className="text-xs text-gray-400 font-medium">
+                  {callingState === 'ringing' ? 'Calling...' : 'Live Call'}
+                </div>
+                <div className="text-sm font-bold">
+                  {otherUser?.name || 'User'}
+                </div>
               </div>
             </div>
           </div>
@@ -139,12 +184,112 @@ function VideoCallUI({ call, onEndCall }) {
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="bg-gradient-to-t from-black via-gray-900 to-transparent border-t border-gray-800 px-8 py-6">
-          <div className="flex items-center justify-center">
-            <div className="bg-gray-800/50 backdrop-blur-md rounded-2xl p-3 shadow-2xl">
-              <CallControls onLeave={onEndCall} />
+        {/* Custom Controls */}
+        <div className="bg-gradient-to-t from-black via-gray-900/95 to-transparent px-8 py-8">
+          <div className="flex items-center justify-center gap-6">
+            {/* Microphone Toggle */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={toggleMic}
+                className={`p-5 rounded-full transition-all shadow-2xl ${
+                  isMicOn 
+                    ? 'bg-white/20 hover:bg-white/30 backdrop-blur-md' 
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
+                title={isMicOn ? 'Mute' : 'Unmute'}
+              >
+                {isMicOn ? (
+                  <Mic size={28} className="text-white" />
+                ) : (
+                  <MicOff size={28} className="text-white" />
+                )}
+              </button>
+              <span className="text-white text-xs font-medium">
+                {isMicOn ? 'Mute' : 'Unmuted'}
+              </span>
             </div>
+
+            {/* Camera Toggle */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={toggleCamera}
+                className={`p-5 rounded-full transition-all shadow-2xl ${
+                  isCameraOn 
+                    ? 'bg-white/20 hover:bg-white/30 backdrop-blur-md' 
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
+                title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
+              >
+                {isCameraOn ? (
+                  <Video size={28} className="text-white" />
+                ) : (
+                  <VideoOff size={28} className="text-white" />
+                )}
+              </button>
+              <span className="text-white text-xs font-medium">
+                {isCameraOn ? 'Camera' : 'Camera Off'}
+              </span>
+            </div>
+
+            {/* Screen Share Toggle */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={toggleScreenShare}
+                className={`p-5 rounded-full transition-all shadow-2xl ${
+                  isScreenSharing 
+                    ? 'bg-green-600 hover:bg-green-700' 
+                    : 'bg-white/20 hover:bg-white/30 backdrop-blur-md'
+                }`}
+                title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+              >
+                <MonitorUp size={28} className="text-white" />
+              </button>
+              <span className="text-white text-xs font-medium">
+                {isScreenSharing ? 'Sharing' : 'Share'}
+              </span>
+            </div>
+
+            {/* End Call */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={onEndCall}
+                className="p-6 bg-red-600 hover:bg-red-700 rounded-full transition-all shadow-2xl ring-2 ring-red-400/50"
+                title="End call"
+              >
+                <PhoneOff size={32} className="text-white" />
+              </button>
+              <span className="text-white text-xs font-medium">End Call</span>
+            </div>
+
+            {/* Speaker Toggle */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={toggleSpeaker}
+                className={`p-5 rounded-full transition-all shadow-2xl ${
+                  isSpeakerOn 
+                    ? 'bg-white/20 hover:bg-white/30 backdrop-blur-md' 
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
+                title={isSpeakerOn ? 'Mute speaker' : 'Unmute speaker'}
+              >
+                {isSpeakerOn ? (
+                  <Volume2 size={28} className="text-white" />
+                ) : (
+                  <VolumeX size={28} className="text-white" />
+                )}
+              </button>
+              <span className="text-white text-xs font-medium">
+                {isSpeakerOn ? 'Speaker' : 'Muted'}
+              </span>
+            </div>
+          </div>
+
+          {/* Call Status */}
+          <div className="text-center mt-6">
+            <p className="text-white/80 text-sm font-medium">
+              {participantCount} participant{participantCount !== 1 ? 's' : ''} in call
+              {isScreenSharing && <span className="ml-2 text-green-400">• Screen sharing</span>}
+            </p>
           </div>
         </div>
       </div>
@@ -158,6 +303,7 @@ export default function ConversationsPage() {
   const [chatClient, setChatClient] = useState(null)
   const [videoClient, setVideoClient] = useState(null)
   const [currentCall, setCurrentCall] = useState(null)
+  const [incomingCall, setIncomingCall] = useState(null)
   const [activeChannel, setActiveChannel] = useState(null)
   const [peopleQuery, setPeopleQuery] = useState('')
   const [peopleResults, setPeopleResults] = useState([])
@@ -203,6 +349,28 @@ export default function ConversationsPage() {
           profile?.avatar_url
         )
         setVideoClient(vClient)
+
+        // Listen for incoming calls
+        vClient.on('call.ring', async (event) => {
+          console.log('Incoming call event:', event)
+          try {
+            // Get the actual call instance from the video client
+            const call = vClient.call(event.call.type, event.call.id)
+            await call.get() // Fetch the call details
+            setIncomingCall(call)
+          } catch (error) {
+            console.error('Failed to setup incoming call:', error)
+          }
+        })
+
+        vClient.on('call.accepted', (event) => {
+          console.log('Call accepted:', event)
+        })
+
+        vClient.on('call.rejected', (event) => {
+          console.log('Call rejected:', event)
+          setIncomingCall(null)
+        })
       } catch (error) {
         console.error('Failed to initialize Stream clients:', error)
       }
@@ -273,10 +441,23 @@ export default function ConversationsPage() {
   }
 
   const startVideoCall = async () => {
-    if (!videoClient || !activeChannel) return
+    if (!videoClient || !activeChannel) {
+      console.error('Video client or active channel not available')
+      alert('Unable to start call. Please refresh the page.')
+      return
+    }
 
     try {
-      const callId = `call-${activeChannel.id}-${Date.now()}`
+      // Request camera and microphone permissions first
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: true, 
+        audio: true 
+      })
+      stream.getTracks().forEach(track => track.stop()) // Stop the test stream
+
+      // Create a simple, short call ID
+      const callId = `call_${Date.now()}`
+
       const call = videoClient.call('default', callId)
 
       // Get other members of the channel
@@ -284,9 +465,14 @@ export default function ConversationsPage() {
         memberId => memberId !== user.id
       )
 
+      console.log('Creating call with ID:', callId)
+      console.log('Call members:', members)
+
+      // Create or get the call
       await call.getOrCreate({
         ring: true,
         data: {
+          created_by_id: user.id,
           members: [
             { user_id: user.id },
             ...members.map(memberId => ({ user_id: memberId }))
@@ -294,10 +480,21 @@ export default function ConversationsPage() {
         },
       })
 
+      // Join the call
+      await call.join()
+
       setCurrentCall(call)
     } catch (error) {
       console.error('Failed to start video call:', error)
-      alert('Failed to start video call. Please try again.')
+      
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        alert('Camera/microphone permission denied. Please allow access to use video calls.')
+      } else if (error.name === 'NotFoundError') {
+        alert('No camera or microphone found. Please connect a device and try again.')
+      } else {
+        console.error('Error details:', error.message, error.code)
+        alert(`Failed to start video call: ${error.message || 'Please try again.'}`)
+      }
     }
   }
 
@@ -306,6 +503,61 @@ export default function ConversationsPage() {
       await currentCall.leave()
       setCurrentCall(null)
     }
+  }
+
+  const acceptIncomingCall = async () => {
+    if (incomingCall) {
+      try {
+        console.log('Accepting call:', incomingCall)
+        console.log('Call state:', incomingCall.state)
+        
+        // Check if already joined
+        if (incomingCall.state.callingState === 'joined') {
+          console.log('Already joined, just setting as current call')
+          setCurrentCall(incomingCall)
+          setIncomingCall(null)
+          return
+        }
+        
+        // Join the call
+        await incomingCall.join()
+        
+        setCurrentCall(incomingCall)
+        setIncomingCall(null)
+      } catch (error) {
+        console.error('Failed to accept call:', error)
+        
+        // If error is about already joined, still set it as current
+        if (error.message && error.message.includes('shall be called only once')) {
+          setCurrentCall(incomingCall)
+          setIncomingCall(null)
+        } else {
+          alert('Failed to join the call. Please try again.')
+          setIncomingCall(null)
+        }
+      }
+    }
+  }
+
+  const rejectIncomingCall = async () => {
+    if (incomingCall) {
+      try {
+        await incomingCall.reject()
+        setIncomingCall(null)
+      } catch (error) {
+        console.error('Failed to reject call:', error)
+        setIncomingCall(null)
+      }
+    }
+  }
+
+  // Get other user info from active channel
+  const getOtherUser = () => {
+    if (!activeChannel) return null
+    const otherMembers = Object.values(activeChannel.state.members).filter(
+      member => member.user?.id !== user?.id
+    )
+    return otherMembers[0]?.user
   }
 
   // Channel filters and sort
@@ -332,6 +584,24 @@ export default function ConversationsPage() {
           </div>
         </div>
       </DashboardLayout>
+    )
+  }
+
+  // Custom action buttons for the composer
+  const CustomInputButtons = (props) => {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 border-t border-gray-200 bg-white">
+        <div className="ml-auto" />
+        <button
+          type="button"
+          onClick={props?.sendMessage || (() => {})}
+          className="px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-gray-800 shadow-sm flex items-center gap-2 transition-colors"
+          title="Send"
+        >
+          <Send size={16} />
+          <span className="text-sm font-semibold">Send</span>
+        </button>
+      </div>
     )
   }
 
@@ -499,10 +769,19 @@ export default function ConversationsPage() {
                     </div>
                     
                     {/* Message List */}
-                    <MessageList />
+                    <MessageList 
+                      hideDeletedMessages
+                      messageActions={[]}
+                    />
                     
-                    {/* Message Input */}
-                    <MessageInput />
+                    {/* Message Input with improved action buttons */}
+                    <MessageInput
+                      InputButtons={CustomInputButtons}
+                      AdditionalTextareaProps={{
+                        className:
+                          'border-t border-gray-200 bg-white px-4 py-3 text-sm placeholder-gray-400 focus:outline-none',
+                      }}
+                    />
                   </>
                 )}
               </Window>
@@ -511,11 +790,64 @@ export default function ConversationsPage() {
           </div>
         </Chat>
 
+        {/* Incoming Call Modal */}
+        {incomingCall && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+            <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-8 max-w-md w-full shadow-2xl border border-gray-700">
+              {/* Caller Avatar */}
+              <div className="flex flex-col items-center mb-6">
+                <div className="relative mb-4">
+                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-3xl ring-4 ring-blue-500/30 animate-pulse">
+                    {incomingCall.state?.createdBy?.name?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                  <div className="absolute -top-2 -right-2 bg-green-500 rounded-full p-2 shadow-lg">
+                    <Video size={20} className="text-white" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-2">
+                  {incomingCall.state?.createdBy?.name || 'Someone'}
+                </h3>
+                <p className="text-gray-400 text-sm">Incoming video call...</p>
+              </div>
+
+              {/* Animated rings */}
+              <div className="flex justify-center mb-8">
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-full bg-blue-500/20 animate-ping absolute"></div>
+                  <div className="w-16 h-16 rounded-full bg-blue-500/30"></div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-4">
+                <button
+                  onClick={rejectIncomingCall}
+                  className="flex-1 py-4 bg-red-600 hover:bg-red-700 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-lg font-semibold text-white"
+                >
+                  <PhoneOff size={24} />
+                  <span>Decline</span>
+                </button>
+                <button
+                  onClick={acceptIncomingCall}
+                  className="flex-1 py-4 bg-green-600 hover:bg-green-700 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-lg font-semibold text-white"
+                >
+                  <Phone size={24} />
+                  <span>Accept</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Video Call Modal */}
         {currentCall && videoClient && (
           <StreamVideo client={videoClient}>
             <StreamCall call={currentCall}>
-              <VideoCallUI call={currentCall} onEndCall={endVideoCall} />
+              <VideoCallUI 
+                call={currentCall} 
+                onEndCall={endVideoCall}
+                otherUser={getOtherUser()}
+              />
             </StreamCall>
           </StreamVideo>
         )}

@@ -183,7 +183,7 @@ export default function DashboardLayout({ children }) {
             <li>
               <button
                 onClick={() => router.push('/feeds')}
-                className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors relative ${
+                className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors ${
                   isActive('/feeds')
                     ? 'bg-gray-900 text-white' 
                     : 'text-gray-700 hover:bg-gray-100'
@@ -192,22 +192,12 @@ export default function DashboardLayout({ children }) {
               >
                 <Rss size={20} />
                 {!sidebarMinimized && <span>Feeds</span>}
-                {!sidebarMinimized && (
-                  <span className="ml-auto bg-pink-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    5
-                  </span>
-                )}
-                {sidebarMinimized && (
-                  <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                    5
-                  </span>
-                )}
               </button>
             </li>
             <li>
               <button
                 onClick={() => router.push('/conversations')}
-                className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors relative ${
+                className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors ${
                   isActive('/conversations')
                     ? 'bg-gray-900 text-white' 
                     : 'text-gray-700 hover:bg-gray-100'
@@ -216,16 +206,6 @@ export default function DashboardLayout({ children }) {
               >
                 <MessageCircle size={20} />
                 {!sidebarMinimized && <span>Conversations</span>}
-                {!sidebarMinimized && (
-                  <span className="ml-auto bg-pink-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    7
-                  </span>
-                )}
-                {sidebarMinimized && (
-                  <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                    7
-                  </span>
-                )}
               </button>
             </li>
             <li>

@@ -70,15 +70,19 @@ export default function ArenaPage() {
         console.error('Error loading courses:', error)
       } else {
         setGeneratedCourses(courses || [])
-        // Get enrolled course IDs from curriculum
+        
+        // Get enrolled course IDs by checking which arena courses have curriculum copies
         const { data: enrolled } = await supabase
           .from('courses')
-          .select('id')
+          .select('arena_course_id')
           .eq('user_id', user.id)
           .eq('source', 'curriculum')
+          .not('arena_course_id', 'is', null)
         
         if (enrolled) {
-          setEnrolledCourses(enrolled.map(c => c.id))
+          // Extract the original arena course IDs from enrolled courses
+          const enrolledIds = enrolled.map(c => c.arena_course_id).filter(Boolean)
+          setEnrolledCourses(enrolledIds)
         }
       }
 
@@ -96,14 +100,33 @@ export default function ArenaPage() {
   const handleEnrollCourse = async (course) => {
     if (!user) return
 
-    // Check if already enrolled
+    // Check if already enrolled in local state
     if (enrolledCourses.includes(course.id)) {
       showNotification('You are already enrolled in this course!', 'warning')
       return
     }
     
     try {
-      // Generate a unique ID for the enrolled course (user_id + course_id + timestamp)
+      // Check if enrollment already exists in database
+      const { data: existingEnrollment, error: checkError } = await supabase
+        .from('courses')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('arena_course_id', course.id)
+        .eq('source', 'curriculum')
+        .maybeSingle()
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError
+      }
+
+      if (existingEnrollment) {
+        showNotification('You are already enrolled in this course!', 'warning')
+        setEnrolledCourses(prev => [...new Set([...prev, course.id])])
+        return
+      }
+
+      // Generate a unique ID for the enrolled course
       const enrolledCourseId = `${user.id}-${course.id}-${Date.now()}`
       
       // Create a copy of the course in curriculum (source = 'curriculum')
@@ -112,6 +135,7 @@ export default function ArenaPage() {
         .insert({
           id: enrolledCourseId,
           user_id: user.id,
+          arena_course_id: course.id, // Track the original arena course
           title: course.title,
           description: course.description,
           topic: course.topic,
@@ -127,15 +151,21 @@ export default function ArenaPage() {
         .single()
 
       if (error) {
+        // Check if it's a unique constraint violation
+        if (error.code === '23505' || error.message?.includes('unique')) {
+          showNotification('You are already enrolled in this course!', 'warning')
+          setEnrolledCourses(prev => [...new Set([...prev, course.id])])
+          return
+        }
         console.error('Supabase enrollment error:', error)
         throw error
       }
 
-      // Use the original course ID for tracking enrollment
+      // Add the arena course ID to enrolled list
       if (data) {
-        setEnrolledCourses(prev => [...prev, course.id])
+        setEnrolledCourses(prev => [...new Set([...prev, course.id])])
+        showNotification('Course enrolled successfully! Check your Curriculum page.', 'success')
       }
-      showNotification('Course enrolled successfully! Check your Curriculum page.', 'success')
     } catch (error) {
       console.error('Error enrolling course:', error)
       showNotification('Failed to enroll course. Please try again.', 'error')
@@ -556,12 +586,6 @@ IMPORTANT:
                           <span>{course.duration}</span>
                         </div>
                       </div>
-                      {enrolledCourses.includes(course.id) && (
-                        <div className="absolute top-4 left-4 bg-green-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg z-10 flex items-center gap-1">
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Enrolled</span>
-                        </div>
-                      )}
                     </div>
                   </div>
 

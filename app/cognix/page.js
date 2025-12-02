@@ -123,11 +123,11 @@ export default function CognixPage() {
                 <div className="flex flex-wrap gap-4 justify-center lg:justify-start">
                   <div className="flex items-center space-x-2 bg-white px-4 py-3 rounded-xl shadow-sm border border-gray-200">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-sm font-medium text-gray-700">AI Models Active</span>
+                    <span className="text-sm font-medium text-gray-700">AI Assistance</span>
                   </div>
                   <div className="flex items-center space-x-2 bg-white px-4 py-3 rounded-xl shadow-sm border border-gray-200">
                     <Users className="w-4 h-4 text-gray-600" />
-                    <span className="text-sm font-medium text-gray-700">50K+ Students</span>
+                    <span className="text-sm font-medium text-gray-700">500+ Students</span>
                   </div>
                   <div className="flex items-center space-x-2 bg-white px-4 py-3 rounded-xl shadow-sm border border-gray-200">
                     <Sparkles className="w-4 h-4 text-[#F5C832]" />
@@ -253,7 +253,7 @@ export default function CognixPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                 <div className="text-center">
-                  <div className="text-4xl font-bold text-[#F5C832] mb-2">50K+</div>
+                  <div className="text-4xl font-bold text-[#F5C832] mb-2">500+</div>
                   <div className="text-sm text-gray-300">Active Students</div>
                 </div>
                 <div className="text-center">

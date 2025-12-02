@@ -54,6 +54,97 @@ body {
   animation: fadeIn 0.3s ease-out;
 }
 
+/* Stream Video Custom Styling - Better Contrast */
+
+/* Video Call Generic Menu */
+.str-video__generic-menu {
+  background: rgba(0, 0, 0, 0.95) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  padding: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+.str-video__generic-menu--item button {
+  color: white !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  padding: 10px 16px !important;
+  border-radius: 8px !important;
+  transition: background 0.2s ease !important;
+  width: 100% !important;
+  text-align: left !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.str-video__generic-menu--item button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.str-video__icon {
+  color: white !important;
+  fill: white !important;
+}
+
+/* Video Call Controls */
+.str-video__call-controls {
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.str-video__call-controls button {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-radius: 50% !important;
+  transition: all 0.2s ease !important;
+}
+
+.str-video__call-controls button:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+.str-video__call-controls svg,
+.str-video__call-controls path {
+  fill: white !important;
+  color: white !important;
+}
+
+/* Participant Labels */
+.str-video__participant-details {
+  background: rgba(0, 0, 0, 0.7) !important;
+  backdrop-filter: blur(5px) !important;
+  color: white !important;
+  font-weight: 500 !important;
+}
+
+.str-video__participant-name {
+  color: white !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Video Tiles */
+.str-video__participant-view {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+/* Speaker Layout */
+.str-video__speaker-layout__wrapper {
+  background: #000 !important;
+}
+
+/* Tooltips */
+.str-video__tooltip {
+  background: rgba(0, 0, 0, 0.9) !important;
+  color: white !important;
+  font-size: 12px !important;
+  padding: 6px 12px !important;
+  border-radius: 6px !important;
+}
+
 /* Stream Chat Custom Styling - Modern Clean Design */
 
 /* Channel List Styling */
@@ -324,22 +415,13 @@ body {
 }
 
 /* Message Actions */
-.str-chat__message-simple__actions {
-  opacity: 0 !important;
-  transition: opacity 0.2s !important;
-  background: white !important;
-  border: 1px solid #e5e7eb !important;
-  border-radius: 8px !important;
-  padding: 4px 6px !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 2px !important;
-  height: auto !important;
+.str-chat__message-simple__actions,
+.str-chat__message-options {
+  display: none !important;
 }
 
 .str-chat__message:hover .str-chat__message-simple__actions {
-  opacity: 1 !important;
+  display: none !important;
 }
 
 .str-chat__message-simple__actions__action {

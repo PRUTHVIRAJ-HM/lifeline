@@ -414,24 +414,6 @@ function InterviewSessionContent() {
               </button>
               
               <button
-                className="p-4 bg-white border-2 border-gray-200 rounded-2xl hover:bg-gray-50 transition-colors shadow-sm"
-                onClick={() => setAnswer("")}
-                disabled={loading}
-                title="Type answer"
-              >
-                <Keyboard size={24} className="text-gray-700" />
-              </button>
-              
-              <button
-                className="p-4 bg-white border-2 border-gray-200 rounded-2xl hover:bg-gray-50 transition-colors shadow-sm"
-                onClick={() => setAiResponse("Show tips here")}
-                disabled={loading}
-                title="Get tips"
-              >
-                <Lightbulb size={24} className="text-gray-700" />
-              </button>
-              
-              <button
                 className="ml-auto p-4 bg-gray-100 border-2 border-gray-200 rounded-2xl hover:bg-gray-200 transition-colors shadow-sm disabled:opacity-50"
                 onClick={submitAnswer}
                 disabled={loading || (!answer && !audioUrl)}
