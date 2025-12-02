@@ -622,7 +622,6 @@ export default function DashboardPage() {
                   <div className="absolute bottom-0 right-0 w-6 h-6 bg-green-500 rounded-full border-4 border-white"></div>
                 </div>
                 <h3 className="font-semibold text-lg text-gray-900">{profile?.full_name || user?.email || 'User'}</h3>
-                <p className="text-sm text-gray-500">College Student</p>
               </div>
 
               {/* Calendar */}
