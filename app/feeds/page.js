@@ -427,27 +427,7 @@ export default function FeedsPage() {
                 </div>
               </div>
 
-              {/* Quick Stats */}
-              <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-4 text-white">
-                <div className="flex items-center space-x-2 mb-4">
-                  <Award className="w-5 h-5 text-[#F5C832]" />
-                  <h3 className="font-bold">Your Activity</h3>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Posts read today</span>
-                    <span className="font-bold">24</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Bookmarks</span>
-                    <span className="font-bold">{bookmarkedPosts.size}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Interactions</span>
-                    <span className="font-bold">{likedPosts.size + bookmarkedPosts.size}</span>
-                  </div>
-                </div>
-              </div>
+              {/* Quick Stats removed per request */}
 
               {/* Suggested Topics */}
               <div className="bg-white rounded-xl border border-gray-200 p-4">
