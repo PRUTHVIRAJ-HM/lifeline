@@ -108,24 +108,21 @@ export default function DashboardPage() {
         setRecentCourses(courses)
       }
 
-      setLoading(false)
-    }
-
-    loadData()
-
-    // Load todos from Supabase instead of localStorage
-    const loadTodos = async () => {
-      if (!user) return
-      const { data, error } = await supabase
+      // Load todos from Supabase
+      const { data: todosData, error: todosError } = await supabase
         .from('todos')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-      if (!error && data) {
-        setTodos(data)
+      
+      if (!todosError && todosData) {
+        setTodos(todosData)
       }
+
+      setLoading(false)
     }
-    loadTodos()
+
+    loadData()
 
     // Load today's session time from Supabase
     if (user) {
