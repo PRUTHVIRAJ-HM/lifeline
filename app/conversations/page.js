@@ -41,7 +41,7 @@ import '@stream-io/video-react-sdk/dist/css/styles.css'
 
 
 // Custom Channel Preview Component
-function CustomChannelPreview({ channel, setActiveChannel, activeChannel }) {
+function CustomChannelPreview({ channel, setActiveChannel, activeChannel, videoClient }) {
   const isActive = activeChannel?.id === channel.id;
   const otherMembers = Object.values(channel.state.members).filter(
     member => member.user?.id !== channel._client.userID
@@ -49,6 +49,43 @@ function CustomChannelPreview({ channel, setActiveChannel, activeChannel }) {
   const displayUser = otherMembers[0]?.user;
   const lastMessage = channel.state.messages[channel.state.messages.length - 1];
   const unreadCount = channel.countUnread();
+  
+  // Check if there's an active call in this channel
+  const [hasActiveCall, setHasActiveCall] = useState(false);
+  
+  useEffect(() => {
+    if (!videoClient) return;
+    
+    const checkActiveCalls = async () => {
+      try {
+        const calls = videoClient.state.calls;
+        // Check if any call is associated with this channel and is active
+        const activeCall = calls.find(call => {
+          const callState = call.state.callingState;
+          return callState === 'ringing' || callState === 'joined' || callState === 'joining';
+        });
+        setHasActiveCall(!!activeCall);
+      } catch (error) {
+        console.error('Error checking active calls:', error);
+      }
+    };
+    
+    checkActiveCalls();
+    
+    // Listen for call state changes
+    const handleCallEvent = () => checkActiveCalls();
+    videoClient.on('call.ring', handleCallEvent);
+    videoClient.on('call.accepted', handleCallEvent);
+    videoClient.on('call.ended', handleCallEvent);
+    videoClient.on('call.rejected', handleCallEvent);
+    
+    return () => {
+      videoClient.off('call.ring', handleCallEvent);
+      videoClient.off('call.accepted', handleCallEvent);
+      videoClient.off('call.ended', handleCallEvent);
+      videoClient.off('call.rejected', handleCallEvent);
+    };
+  }, [videoClient]);
 
   return (
     <button
@@ -70,6 +107,12 @@ function CustomChannelPreview({ channel, setActiveChannel, activeChannel }) {
         ) : (
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#FF8A65] to-[#F57C00] flex items-center justify-center text-white font-semibold text-lg">
             {(displayUser?.name || 'U').charAt(0).toUpperCase()}
+          </div>
+        )}
+        {/* Active Call Indicator */}
+        {hasActiveCall && (
+          <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center ring-2 ring-white animate-pulse">
+            <Video size={14} className="text-white" />
           </div>
         )}
       </div>
@@ -97,7 +140,14 @@ function CustomChannelPreview({ channel, setActiveChannel, activeChannel }) {
           <p className={`text-xs truncate ${
             isActive ? 'text-white/80' : 'text-gray-500'
           }`}>
-            {lastMessage?.text || 'No messages yet'}
+            {hasActiveCall ? (
+              <span className="flex items-center gap-1">
+                <Video size={12} className="text-green-500" />
+                <span className="text-green-500 font-semibold">Call in progress</span>
+              </span>
+            ) : (
+              lastMessage?.text || 'No messages yet'
+            )}
           </p>
           {unreadCount > 0 && (
             <span className={`ml-2 text-xs rounded-full w-5 h-5 flex items-center justify-center font-semibold flex-shrink-0 ${
@@ -181,13 +231,13 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
         </div>
 
         {/* Custom Controls */}
-        <div className="bg-gradient-to-t from-black via-gray-900/95 to-transparent px-8 py-8">
-          <div className="flex items-center justify-center gap-6">
+        <div className="bg-gradient-to-t from-black via-gray-900/95 to-transparent px-4 sm:px-8 py-4 sm:py-8 pb-20 sm:pb-12">
+          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
             {/* Microphone Toggle */}
             <div className="flex flex-col items-center gap-2">
               <button
                 onClick={toggleMic}
-                className={`p-5 rounded-full transition-all shadow-2xl ${
+                className={`p-4 sm:p-5 rounded-full transition-all shadow-2xl ${
                   isMicOn 
                     ? 'bg-white/20 hover:bg-white/30 backdrop-blur-md' 
                     : 'bg-red-600 hover:bg-red-700'
@@ -195,12 +245,12 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
                 title={isMicOn ? 'Mute' : 'Unmute'}
               >
                 {isMicOn ? (
-                  <Mic size={28} className="text-white" />
+                  <Mic className="text-white w-6 h-6 sm:w-7 sm:h-7" />
                 ) : (
-                  <MicOff size={28} className="text-white" />
+                  <MicOff className="text-white w-6 h-6 sm:w-7 sm:h-7" />
                 )}
               </button>
-              <span className="text-white text-xs font-medium">
+              <span className="text-white text-[11px] sm:text-xs font-medium">
                 {isMicOn ? 'Mute' : 'Unmuted'}
               </span>
             </div>
@@ -209,7 +259,7 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
             <div className="flex flex-col items-center gap-2">
               <button
                 onClick={toggleCamera}
-                className={`p-5 rounded-full transition-all shadow-2xl ${
+                className={`p-4 sm:p-5 rounded-full transition-all shadow-2xl ${
                   isCameraOn 
                     ? 'bg-white/20 hover:bg-white/30 backdrop-blur-md' 
                     : 'bg-red-600 hover:bg-red-700'
@@ -217,12 +267,12 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
                 title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
               >
                 {isCameraOn ? (
-                  <Video size={28} className="text-white" />
+                  <Video className="text-white w-6 h-6 sm:w-7 sm:h-7" />
                 ) : (
-                  <VideoOff size={28} className="text-white" />
+                  <VideoOff className="text-white w-6 h-6 sm:w-7 sm:h-7" />
                 )}
               </button>
-              <span className="text-white text-xs font-medium">
+              <span className="text-white text-[11px] sm:text-xs font-medium">
                 {isCameraOn ? 'Camera' : 'Camera Off'}
               </span>
             </div>
@@ -231,16 +281,16 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
             <div className="flex flex-col items-center gap-2">
               <button
                 onClick={toggleScreenShare}
-                className={`p-5 rounded-full transition-all shadow-2xl ${
+                className={`p-4 sm:p-5 rounded-full transition-all shadow-2xl ${
                   isScreenSharing 
                     ? 'bg-green-600 hover:bg-green-700' 
                     : 'bg-white/20 hover:bg-white/30 backdrop-blur-md'
                 }`}
                 title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
               >
-                <MonitorUp size={28} className="text-white" />
+                <MonitorUp className="text-white w-6 h-6 sm:w-7 sm:h-7" />
               </button>
-              <span className="text-white text-xs font-medium">
+              <span className="text-white text-[11px] sm:text-xs font-medium">
                 {isScreenSharing ? 'Sharing' : 'Share'}
               </span>
             </div>
@@ -249,19 +299,19 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
             <div className="flex flex-col items-center gap-2">
               <button
                 onClick={onEndCall}
-                className="p-6 bg-red-600 hover:bg-red-700 rounded-full transition-all shadow-2xl ring-2 ring-red-400/50"
+                className="p-5 sm:p-6 bg-red-600 hover:bg-red-700 rounded-full transition-all shadow-2xl ring-2 ring-red-400/50"
                 title="End call"
               >
-                <PhoneOff size={32} className="text-white" />
+                <PhoneOff className="text-white w-7 h-7 sm:w-8 sm:h-8" />
               </button>
-              <span className="text-white text-xs font-medium">End Call</span>
+              <span className="text-white text-[11px] sm:text-xs font-medium">End Call</span>
             </div>
 
             {/* Speaker Toggle */}
             <div className="flex flex-col items-center gap-2">
               <button
                 onClick={toggleSpeaker}
-                className={`p-5 rounded-full transition-all shadow-2xl ${
+                className={`p-4 sm:p-5 rounded-full transition-all shadow-2xl ${
                   isSpeakerOn 
                     ? 'bg-white/20 hover:bg-white/30 backdrop-blur-md' 
                     : 'bg-red-600 hover:bg-red-700'
@@ -269,20 +319,20 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
                 title={isSpeakerOn ? 'Mute speaker' : 'Unmute speaker'}
               >
                 {isSpeakerOn ? (
-                  <Volume2 size={28} className="text-white" />
+                  <Volume2 className="text-white w-6 h-6 sm:w-7 sm:h-7" />
                 ) : (
-                  <VolumeX size={28} className="text-white" />
+                  <VolumeX className="text-white w-6 h-6 sm:w-7 sm:h-7" />
                 )}
               </button>
-              <span className="text-white text-xs font-medium">
+              <span className="text-white text-[11px] sm:text-xs font-medium">
                 {isSpeakerOn ? 'Speaker' : 'Muted'}
               </span>
             </div>
           </div>
 
           {/* Call Status */}
-          <div className="text-center mt-6">
-            <p className="text-white/80 text-sm font-medium">
+          <div className="text-center mt-4 sm:mt-6">
+            <p className="text-white/80 text-xs sm:text-sm font-medium">
               {participantCount} participant{participantCount !== 1 ? 's' : ''} in call
               {isScreenSharing && <span className="ml-2 text-green-400">• Screen sharing</span>}
             </p>
@@ -301,6 +351,7 @@ export default function ConversationsPage() {
   const [currentCall, setCurrentCall] = useState(null)
   const [incomingCall, setIncomingCall] = useState(null)
   const [activeChannel, setActiveChannel] = useState(null)
+  const [activeChannelHasCall, setActiveChannelHasCall] = useState(false)
   const [peopleQuery, setPeopleQuery] = useState('')
   const [peopleResults, setPeopleResults] = useState([])
   const [showNewChat, setShowNewChat] = useState(false)
@@ -600,6 +651,87 @@ export default function ConversationsPage() {
     }
   }
 
+  // Check if active channel has an ongoing call
+  useEffect(() => {
+    if (!videoClient || !activeChannel) {
+      setActiveChannelHasCall(false);
+      return;
+    }
+    
+    const checkChannelCall = () => {
+      try {
+        const calls = videoClient.state.calls;
+        const activeCall = calls.find(call => {
+          const callState = call.state.callingState;
+          return callState === 'ringing' || callState === 'joined' || callState === 'joining';
+        });
+        setActiveChannelHasCall(!!activeCall);
+      } catch (error) {
+        console.error('Error checking channel call:', error);
+        setActiveChannelHasCall(false);
+      }
+    };
+    
+    checkChannelCall();
+    
+    const handleCallEvent = () => checkChannelCall();
+    videoClient.on('call.ring', handleCallEvent);
+    videoClient.on('call.accepted', handleCallEvent);
+    videoClient.on('call.ended', handleCallEvent);
+    videoClient.on('call.rejected', handleCallEvent);
+    
+    return () => {
+      videoClient.off('call.ring', handleCallEvent);
+      videoClient.off('call.accepted', handleCallEvent);
+      videoClient.off('call.ended', handleCallEvent);
+      videoClient.off('call.rejected', handleCallEvent);
+    };
+  }, [videoClient, activeChannel]);
+
+  // Join an ongoing call
+  const joinOngoingCall = async () => {
+    if (!videoClient) {
+      alert('Video client not available. Please refresh the page.');
+      return;
+    }
+    
+    try {
+      // Find the active call
+      const calls = videoClient.state.calls;
+      const activeCall = calls.find(call => {
+        const callState = call.state.callingState;
+        return callState === 'ringing' || callState === 'joined' || callState === 'joining';
+      });
+      
+      if (!activeCall) {
+        alert('No active call found.');
+        return;
+      }
+      
+      // Request permissions
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: true, 
+        audio: true 
+      });
+      stream.getTracks().forEach(track => track.stop());
+      
+      // Join the call if not already joined
+      if (activeCall.state.callingState !== 'joined') {
+        await activeCall.join();
+      }
+      
+      setCurrentCall(activeCall);
+    } catch (error) {
+      console.error('Failed to join ongoing call:', error);
+      
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        alert('Camera/microphone permission denied. Please allow access to join the call.');
+      } else {
+        alert(`Failed to join call: ${error.message || 'Please try again.'}`);
+      }
+    }
+  };
+
   // Get other user info from active channel
   const getOtherUser = () => {
     if (!activeChannel) return null
@@ -726,6 +858,7 @@ export default function ConversationsPage() {
                     {...props} 
                     setActiveChannel={setActiveChannel}
                     activeChannel={activeChannel}
+                    videoClient={videoClient}
                   />
                 )}
               />
@@ -790,13 +923,24 @@ export default function ConversationsPage() {
                         })()}
                       </div>
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={startVideoCall}
-                          className="p-2 hover:bg-gray-100 rounded-full transition-all group"
-                          title="Video call"
-                        >
-                          <Video size={20} className="text-gray-600 group-hover:text-gray-900" />
-                        </button>
+                        {activeChannelHasCall ? (
+                          <button
+                            onClick={joinOngoingCall}
+                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all flex items-center gap-2 font-semibold text-sm shadow-md animate-pulse"
+                            title="Join ongoing call"
+                          >
+                            <Video size={18} />
+                            <span>Join Call</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={startVideoCall}
+                            className="p-2 hover:bg-gray-100 rounded-full transition-all group"
+                            title="Video call"
+                          >
+                            <Video size={20} className="text-gray-600 group-hover:text-gray-900" />
+                          </button>
+                        )}
                         <div className="relative">
                           <button
                             onClick={() => setHeaderMenuOpen((v) => !v)}

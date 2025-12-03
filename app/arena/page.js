@@ -220,7 +220,7 @@ export default function ArenaPage() {
       // Prepare the prompt for course generation
       const numChapters = aiCourseData.chapters
 
-      const systemPrompt = `You are an expert course creator AI. Generate a detailed, structured course curriculum based on the user's requirements. Return ONLY a valid JSON object with no additional text or markdown formatting.`
+      const systemPrompt = `You are an expert course curriculum designer AI. Your task is to create a detailed, well-structured course syllabus with specific, searchable lesson titles. Return ONLY a valid JSON object with no additional text, markdown formatting, or code blocks.`
 
       const userPrompt = `Create a comprehensive course curriculum with the following specifications:
 
@@ -244,7 +244,8 @@ Generate a JSON object with this exact structure:
       "duration": "estimated time to complete",
       "lessons": [
         {
-          "title": "Lesson title",
+          "title": "Specific lesson title that describes what will be taught",
+          "searchKeywords": "specific keywords for finding relevant video tutorials",
           "content": "Detailed lesson content with proper markdown formatting.\\n\\n# Main Heading\\n\\nIntroductory paragraph explaining the topic.\\n\\n## Subheading\\n\\nMore detailed content here.\\n\\n- Bullet point 1\\n- Bullet point 2\\n- Bullet point 3\\n\\n\`\`\`\\ncode example here\\n\`\`\`\\n\\nTip: Important tips should be prefixed with 'Tip:' for special formatting.\\n\\nConclusion paragraph.",
           "duration": "10-15 min"
         }
@@ -253,15 +254,33 @@ Generate a JSON object with this exact structure:
   ]
 }
 
-IMPORTANT:
-- Each chapter must have a clear outline (3-5 bullet points in the 'outline' array)
-- Each chapter must have 3-5 lessons
+CRITICAL REQUIREMENTS FOR LESSON TITLES AND SEARCH KEYWORDS:
+- Each lesson title must be SPECIFIC and DESCRIPTIVE (e.g., "Setting up Python Virtual Environments" not just "Setup")
+- Each lesson must have UNIQUE and SPECIFIC searchKeywords (3-5 relevant keywords) that will help find the right tutorial video
+- Lesson titles within the same chapter should cover DIFFERENT topics (no repetition)
+- searchKeywords should be highly specific to that lesson's content (e.g., "python venv pip install tutorial" not just "python tutorial")
+- Each chapter must have 3-5 DISTINCT lessons that progressively build on each other
 - Each lesson content MUST use markdown formatting with headings (# ## ###), bullet points (-), code blocks (\`\`\`), and tips (Tip:)
 - Content should be educational and comprehensive with at least 3-4 paragraphs per lesson
 - Make sure the course is tailored to ${aiCourseData.level} level
 - Each chapter should build upon the previous one
-- Lessons should be unique and not repetitive
-- Use proper markdown syntax in the content field for better formatting`
+- Use proper markdown syntax in the content field for better formatting
+
+Example of good lesson structure:
+{
+  "title": "Understanding Python List Comprehensions",
+  "searchKeywords": "python list comprehension tutorial examples ${aiCourseData.level}",
+  "content": "...",
+  "duration": "15 min"
+}
+
+BAD example (too generic):
+{
+  "title": "Python Basics",
+  "searchKeywords": "python tutorial",
+  "content": "...",
+  "duration": "15 min"
+}`
 
       // Call the Ollama API
       const response = await fetch('/api/chat', {
@@ -320,6 +339,7 @@ IMPORTANT:
             duration: '1-2 hours',
             lessons: Array.from({ length: 3 }, (_, j) => ({
               title: `Lesson ${j + 1}`,
+              searchKeywords: `${aiCourseData.topic} lesson ${j + 1} tutorial ${aiCourseData.level}`,
               content: 'This lesson covers the fundamentals and basic concepts you need to know.\n\nMore details and examples provided.\n\nSummary and key takeaways.',
               duration: '15 min'
             }))
@@ -334,15 +354,21 @@ IMPORTANT:
         showNotification('Fetching relevant videos...', 'info')
 
         enrichedChapters = await Promise.all(
-          courseData.chapters.map(async (chapter) => {
+          courseData.chapters.map(async (chapter, chapterIndex) => {
             if (!chapter.lessons || chapter.lessons.length === 0) {
               return chapter
             }
 
             const enrichedLessons = await Promise.all(
-              chapter.lessons.map(async (lesson) => {
+              chapter.lessons.map(async (lesson, lessonIndex) => {
                 try {
-                  const searchQuery = `${aiCourseData.topic} ${chapter.title} ${lesson.title} tutorial ${aiCourseData.level}`
+                  // Use the AI-generated searchKeywords if available, otherwise construct a specific query
+                  const searchQuery = lesson.searchKeywords 
+                    ? `${lesson.searchKeywords}`
+                    : `${aiCourseData.topic} ${lesson.title} tutorial ${aiCourseData.level}`
+                  
+                  console.log(`Searching for Chapter ${chapterIndex + 1}, Lesson ${lessonIndex + 1}: "${searchQuery}"`)
+                  
                   const ytResponse = await fetch('/api/youtube', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -608,16 +634,6 @@ IMPORTANT:
                       </div>
                     </div>
 
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-gray-600">Progress</span>
-                        <span className="font-semibold text-gray-900">{course.progress}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div className="bg-[#F5C832] h-2 rounded-full" style={{ width: `${course.progress}%` }}></div>
-                      </div>
-                    </div>
-
                     {course.goals && (
                       <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                         <div className="text-xs font-semibold text-gray-700 mb-1">Learning Goals:</div>
@@ -625,11 +641,11 @@ IMPORTANT:
                       </div>
                     )}
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2">
                       <button 
                         onClick={() => handleEnrollCourse(course)}
                         disabled={enrolledCourses.includes(course.id)}
-                        className={`flex-1 px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center justify-center space-x-2 ${
+                        className={`w-full px-4 py-2.5 rounded-lg font-medium text-sm transition-colors flex items-center justify-center space-x-2 ${
                           enrolledCourses.includes(course.id)
                             ? 'bg-green-50 text-green-700 border border-green-200 cursor-not-allowed'
                             : 'bg-gray-900 text-white hover:bg-gray-800'
@@ -647,21 +663,23 @@ IMPORTANT:
                           </>
                         )}
                       </button>
-                      <button 
-                        onClick={() => setPreviewCourse(course)}
-                          className="flex-1 px-6 py-3 border-2 border-blue-500 rounded-lg bg-blue-50 text-blue-900 font-bold flex items-center justify-center space-x-2 shadow-sm hover:bg-blue-100 hover:border-blue-600 transition-all group"
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setPreviewCourse(course)}
+                          className="flex-1 px-3 py-2.5 border-2 border-blue-500 rounded-lg bg-blue-50 text-blue-900 font-semibold flex items-center justify-center space-x-1.5 shadow-sm hover:bg-blue-100 hover:border-blue-600 transition-all group text-sm"
                           title="Preview course"
                         >
-                          <Eye className="w-6 h-6 text-blue-700 group-hover:text-blue-900" />
-                          <span className="ml-3 text-base font-semibold">Preview</span>
+                          <Eye className="w-4 h-4 text-blue-700 group-hover:text-blue-900" />
+                          <span>Preview</span>
                         </button>
-                      <button 
-                        onClick={() => handleDeleteCourse(course.id)}
-                        className="px-4 py-2 border border-red-300 rounded-lg hover:bg-red-50 hover:border-red-400 transition-colors group"
-                        title="Delete course"
-                      >
-                        <Trash2 className="w-5 h-5 text-red-600 group-hover:text-red-700" />
-                      </button>
+                        <button 
+                          onClick={() => handleDeleteCourse(course.id)}
+                          className="px-4 py-2.5 border border-red-300 rounded-lg hover:bg-red-50 hover:border-red-400 transition-colors group"
+                          title="Delete course"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600 group-hover:text-red-700" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -731,7 +749,6 @@ IMPORTANT:
                     <option value="12 hours">12 hours</option>
                     <option value="16 hours">16 hours</option>
                     <option value="20 hours">20 hours</option>
-                    <option value="self-paced">Self-paced</option>
                   </select>
                 </div>
 
@@ -831,51 +848,26 @@ IMPORTANT:
                         <div className="text-xs text-gray-300">Visual analytics</div>
                       </div>
                     </div>
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle2 className="w-5 h-5 text-[#F5C832] flex-shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-semibold text-sm">Downloadable</div>
-                        <div className="text-xs text-gray-300">Offline learning</div>
-                      </div>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle2 className="w-5 h-5 text-[#F5C832] flex-shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-semibold text-sm">Certification</div>
-                        <div className="text-xs text-gray-300">Shareable credential</div>
-                      </div>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle2 className="w-5 h-5 text-[#F5C832] flex-shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-semibold text-sm">Mobile App</div>
-                        <div className="text-xs text-gray-300">Learn anywhere</div>
-                      </div>
-                    </div>
                   </div>
                 </div>
 
                 <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
                   <div className="flex items-start space-x-3">
-                    <Zap className="w-5 h-5 text-[#F5C832] flex-shrink-0 mt-0.5" />
+                    <Zap className="w-5 h-5 text-[##182131] flex-shrink-0 mt-0.5" />
                     <div>
                       <h4 className="font-bold text-gray-900 mb-2">AI-Powered Course Creation</h4>
                       <ul className="space-y-1 text-sm text-gray-700">
                         <li className="flex items-start space-x-2">
-                          <span className="text-[#F5C832] mt-1">•</span>
-                          <span>Personalized curriculum based on your goals</span>
+                          <CheckCircle2 className="w-5 h-5 text-[##182131] flex-shrink-0 mt-0.5" />
+                          <span>Personalize curriculum based on your goals</span>
                         </li>
                         <li className="flex items-start space-x-2">
-                          <span className="text-[#F5C832] mt-1">•</span>
-                          <span>Curated materials from top resources</span>
+                          <CheckCircle2 className="w-5 h-5 text-[##182131] flex-shrink-0 mt-0.5" />
+                          <span>24/7 AI support</span>
                         </li>
                         <li className="flex items-start space-x-2">
-                          <span className="text-[#F5C832] mt-1">•</span>
+                          <CheckCircle2 className="w-5 h-5 text-[##182131] flex-shrink-0 mt-0.5" />
                           <span>Adaptive learning path</span>
-                        </li>
-                        <li className="flex items-start space-x-2">
-                          <span className="text-[#F5C832] mt-1">•</span>
-                          <span>24/7 AI mentor support</span>
                         </li>
                       </ul>
                     </div>
@@ -976,14 +968,9 @@ IMPORTANT:
         {/* Preview Modal */}
         {previewCourse && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4 overflow-y-auto">
-            <div className="bg-white rounded-lg max-w-4xl w-full shadow-2xl my-8">
+            <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl my-8">
               {/* Header with Thumbnail Background */}
-              <div className="relative h-48 bg-gradient-to-br from-gray-900 to-gray-800 overflow-hidden">
-                <img 
-                  src={`https://source.unsplash.com/800x300/?${encodeURIComponent(previewCourse.title)},course,learning,education`} 
-                  alt="Course Thumbnail" 
-                  className="w-full h-full object-cover opacity-40"
-                />
+              <div className="relative h-48 bg-gradient-to-br from-gray-900 to-gray-800 overflow-hidden rounded-t-2xl">
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                 <button 
                   onClick={() => { setPreviewCourse(null); setExpandedChapter(null); }} 
@@ -994,9 +981,8 @@ IMPORTANT:
                 <div className="absolute bottom-4 left-6 right-6">
                   <div className="flex items-center space-x-2 mb-2">
                     <span className="bg-[#F5C832] text-gray-900 text-xs font-bold px-2 py-1 rounded">New</span>
-                    <span className="text-yellow-400 text-sm font-bold">★ 4.9</span>
-                    <span className="text-white/80 text-sm">(32 ratings)</span>
-                    <span className="text-white/80 text-sm">• 179 students</span>
+                    <span className="text-white/80 text-sm">• {getCourseChapters(previewCourse).length} chapters</span>
+                    <span className="text-white/80 text-sm">• {previewCourse.duration}</span>
                   </div>
                   <h2 className="text-2xl font-bold text-white mb-1">{previewCourse.title}</h2>
                   {previewCourse.description && (
