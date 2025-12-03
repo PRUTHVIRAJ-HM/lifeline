@@ -72,10 +72,6 @@ function CustomChannelPreview({ channel, setActiveChannel, activeChannel }) {
             {(displayUser?.name || 'U').charAt(0).toUpperCase()}
           </div>
         )}
-        {/* Online indicator */}
-        <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 ${
-          isActive ? 'border-gray-900' : 'border-white'
-        }`}></div>
       </div>
 
       {/* Content */}
@@ -785,14 +781,9 @@ export default function ConversationsPage() {
                                     {(displayUser?.name || 'U').charAt(0).toUpperCase()}
                                   </div>
                                 )}
-                                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
                               </div>
                               <div>
                                 <h2 className="font-semibold text-gray-900 text-base">{displayUser?.name || 'User'}</h2>
-                                <p className="text-xs text-green-600 font-medium flex items-center gap-1">
-                                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                                  Online
-                                </p>
                               </div>
                             </>
                           );

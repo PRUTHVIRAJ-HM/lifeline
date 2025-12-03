@@ -907,7 +907,6 @@ export default function SettingsPage() {
 
   const sections = [
     { id: 'profile', name: 'Profile', icon: User },
-    { id: 'preferences', name: 'Preferences', icon: SettingsIcon },
     { id: 'diagnostics', name: 'Diagnostics', icon: Activity },
     { id: 'account', name: 'Account', icon: Trash2 },
     { id: 'billing', name: 'Billing & Memberships', icon: CreditCard },
@@ -1136,93 +1135,7 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* Preferences Section */}
-              {activeSection === 'preferences' && (
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-8">App Preferences</h2>
-                  
-                  <form onSubmit={handlePreferencesUpdate} className="space-y-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Theme
-                      </label>
-                      <select
-                        value={preferences.theme}
-                        onChange={(e) => setPreferences({ ...preferences, theme: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                      >
-                        <option value="light">Light</option>
-                        <option value="dark">Dark</option>
-                        <option value="system">System Default</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Language
-                      </label>
-                      <select
-                        value={preferences.language}
-                        onChange={(e) => setPreferences({ ...preferences, language: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                      >
-                        <option value="en">English</option>
-                        <option value="es">Español</option>
-                        <option value="fr">Français</option>
-                        <option value="de">Deutsch</option>
-                        <option value="ja">日本語</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Timezone
-                      </label>
-                      <select
-                        value={preferences.timezone}
-                        onChange={(e) => setPreferences({ ...preferences, timezone: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                      >
-                        <option value="UTC">UTC</option>
-                        <option value="America/New_York">Eastern Time (ET)</option>
-                        <option value="America/Chicago">Central Time (CT)</option>
-                        <option value="America/Denver">Mountain Time (MT)</option>
-                        <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                        <option value="Europe/London">London (GMT)</option>
-                        <option value="Europe/Paris">Paris (CET)</option>
-                        <option value="Asia/Tokyo">Tokyo (JST)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Date Format
-                      </label>
-                      <select
-                        value={preferences.dateFormat}
-                        onChange={(e) => setPreferences({ ...preferences, dateFormat: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                      >
-                        <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                        <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                        <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                        <option value="DD MMM YYYY">DD MMM YYYY</option>
-                      </select>
-                    </div>
-
-                    <div className="flex justify-end pt-4">
-                      <button
-                        type="submit"
-                        disabled={saving}
-                        className="flex items-center space-x-2 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>{saving ? 'Saving...' : 'Save Preferences'}</span>
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
+              {/* Preferences Section - Removed */}
 
               {/* Diagnostics Section */}
               {activeSection === 'diagnostics' && (
