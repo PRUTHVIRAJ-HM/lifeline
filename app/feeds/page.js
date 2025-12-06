@@ -12,7 +12,6 @@ import {
   MessageCircle,
   Heart,
   Share2,
-  Bookmark,
   Filter,
   Search,
   Globe,
@@ -28,16 +27,18 @@ import DashboardLayout from '@/components/DashboardLayout'
 export default function FeedsPage() {
   const [activeTab, setActiveTab] = useState('all')
   const [likedPosts, setLikedPosts] = useState(new Set())
-  const [bookmarkedPosts, setBookmarkedPosts] = useState(new Set())
   const [searchQuery, setSearchQuery] = useState('')
-  const [articles, setArticles] = useState([])
+  const [allArticles, setAllArticles] = useState([])
+  const [displayedArticles, setDisplayedArticles] = useState([])
+  const [offset, setOffset] = useState(10)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(null)
 
   // Get unique categories from articles
   const getUniqueCategories = () => {
     const categoriesSet = new Set()
-    articles.forEach(article => {
+    allArticles.forEach(article => {
       if (article.category) {
         categoriesSet.add(article.category)
       }
@@ -59,12 +60,12 @@ export default function FeedsPage() {
   }
 
   const categories = [
-    { id: 'all', name: 'All', icon: Globe, count: articles.length },
+    { id: 'all', name: 'All', icon: Globe, count: allArticles.length },
     ...uniqueCategories.map(cat => ({
       id: cat,
       name: cat,
       icon: categoryIcons[cat] || Zap,
-      count: articles.filter(a => a.category === cat).length
+      count: allArticles.filter(a => a.category === cat).length
     }))
   ]
 
@@ -85,7 +86,11 @@ export default function FeedsPage() {
         // API returns data.data.articles
         const articlesList = data.data?.articles || data.articles || []
         console.log('Fetched articles:', articlesList)
-        setArticles(articlesList)
+        
+        // Store all articles and display first 10
+        setAllArticles(articlesList)
+        setDisplayedArticles(articlesList.slice(0, 10))
+        setOffset(10)
       } catch (err) {
         console.error('Error fetching articles:', err)
         setError(err.message)
@@ -139,20 +144,10 @@ export default function FeedsPage() {
     })
   }
 
-  const toggleBookmark = (postId) => {
-    setBookmarkedPosts(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(postId)) {
-        newSet.delete(postId)
-      } else {
-        newSet.add(postId)
-      }
-      return newSet
-    })
-  }
+
 
   // Map API articles to feed items format
-  const feedItems = articles.map((article, index) => {
+  const feedItems = displayedArticles.map((article, index) => {
     const category = article.category || 'Trending'
     return {
       id: article.url, // Use URL as unique ID
@@ -189,7 +184,7 @@ export default function FeedsPage() {
     const tagCount = {}
     
     // Count all tags from articles
-    articles.forEach(article => {
+    allArticles.forEach(article => {
       if (article.tags && Array.isArray(article.tags)) {
         article.tags.forEach(tag => {
           tagCount[tag] = (tagCount[tag] || 0) + 1
@@ -201,8 +196,7 @@ export default function FeedsPage() {
     const sortedTags = Object.entries(tagCount)
       .map(([name, count]) => ({
         name,
-        count: `${count} article${count !== 1 ? 's' : ''}`,
-        trend: `+${Math.floor(Math.random() * 200 + 50)}%` // Random trend for visual effect
+        count: `${count} article${count !== 1 ? 's' : ''}`
       }))
       .sort((a, b) => parseInt(b.count) - parseInt(a.count))
       .slice(0, 5)
@@ -211,6 +205,19 @@ export default function FeedsPage() {
   }
 
   const trendingTopics = getTrendingTopics()
+
+  // Load more feeds
+  const loadMoreFeeds = () => {
+    setLoadingMore(true)
+    // Simulate a small delay for better UX
+    setTimeout(() => {
+      const newOffset = offset + 10
+      const newArticles = allArticles.slice(0, newOffset)
+      setDisplayedArticles(newArticles)
+      setOffset(newOffset)
+      setLoadingMore(false)
+    }, 300)
+  }
 
   return (
     <DashboardLayout>
@@ -330,12 +337,7 @@ export default function FeedsPage() {
                               <p className="text-sm text-gray-500">{item.source} • {item.time}</p>
                             </div>
                           </div>
-                          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                            <Bookmark 
-                              className={`w-5 h-5 ${bookmarkedPosts.has(item.id) ? 'fill-[#F5C832] text-[#F5C832]' : 'text-gray-600'}`}
-                              onClick={() => toggleBookmark(item.id)}
-                            />
-                          </button>
+
                         </div>
 
                         {/* Post Image */}
@@ -393,10 +395,21 @@ export default function FeedsPage() {
               )}
 
               {/* Load More */}
-              {!loading && !error && filteredFeedItems.length > 0 && (
+              {!loading && !error && filteredFeedItems.length > 0 && offset < allArticles.length && (
                 <div className="mt-6 text-center">
-                  <button className="px-6 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700">
-                    Load More Feeds
+                  <button 
+                    onClick={loadMoreFeeds}
+                    disabled={loadingMore}
+                    className="px-6 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
+                  >
+                    {loadingMore ? (
+                      <>
+                        <Loader className="w-4 h-4 animate-spin" />
+                        <span>Loading...</span>
+                      </>
+                    ) : (
+                      <span>Load More Feeds</span>
+                    )}
                   </button>
                 </div>
               )}
@@ -413,14 +426,9 @@ export default function FeedsPage() {
                 <div className="space-y-3">
                   {trendingTopics.map((topic, index) => (
                     <button key={index} className="w-full text-left p-3 rounded-lg hover:bg-gray-50 transition-colors group">
-                      <div className="flex items-start justify-between mb-1">
-                        <p className="font-medium text-gray-900 group-hover:text-gray-700">
-                          {index + 1}. {topic.name}
-                        </p>
-                        <span className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded">
-                          {topic.trend}
-                        </span>
-                      </div>
+                      <p className="font-medium text-gray-900 group-hover:text-gray-700 mb-1">
+                        {index + 1}. {topic.name}
+                      </p>
                       <p className="text-sm text-gray-500">{topic.count}</p>
                     </button>
                   ))}

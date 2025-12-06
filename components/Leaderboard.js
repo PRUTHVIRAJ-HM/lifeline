@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getLeaderboard, getUserRank } from '@/lib/scoring'
-import { Trophy, Medal, Award, TrendingUp, Zap, Target } from 'lucide-react'
+import { Trophy, Medal, TrendingUp, Zap, Target } from 'lucide-react'
 
 export default function Leaderboard({ userId, showTop = 10, compact = false }) {
   const [leaderboardData, setLeaderboardData] = useState([])
@@ -38,11 +38,11 @@ export default function Leaderboard({ userId, showTop = 10, compact = false }) {
       case 1:
         return <Trophy className="w-5 h-5 text-yellow-500" />
       case 2:
-        return <Medal className="w-5 h-5 text-gray-400" />
+        return <Trophy className="w-5 h-5 text-gray-400" />
       case 3:
-        return <Award className="w-5 h-5 text-amber-600" />
+        return <Trophy className="w-5 h-5 text-amber-700" />
       default:
-        return <span className="w-5 h-5 flex items-center justify-center text-xs font-bold text-gray-400">#{rank}</span>
+        return <Medal className="w-5 h-5 text-blue-500" />
     }
   }
 
