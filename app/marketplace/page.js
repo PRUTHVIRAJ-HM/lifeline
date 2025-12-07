@@ -134,7 +134,7 @@ export default function MarketplacePage() {
       category: 'business',
       price: 2799,
       originalPrice: 6999,
-      rating: 4.6,
+      rating: 4.9,
       reviews: 95000,
       students: 280000,
       duration: '42 hours',
