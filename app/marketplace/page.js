@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
-import { createClient } from '@/lib/supabase/client'
 import { 
   ShoppingBag,
   Search,
@@ -21,36 +20,12 @@ import {
   Brain,
   CheckCircle2
 } from 'lucide-react'
-import Link from 'next/link'
-import { courses } from './data'
 
 export default function MarketplacePage() {
   const [activeTab, setActiveTab] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [likedCourses, setLikedCourses] = useState(new Set())
-  const [enrolledCourses, setEnrolledCourses] = useState(new Set())
-  const [user, setUser] = useState(null)
-  const supabase = createClient()
-
-  useEffect(() => {
-    async function checkEnrollments() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      
-      setUser(user)
-      
-      const { data } = await supabase
-        .from('enrollments')
-        .select('course_id')
-        .eq('user_id', user.id)
-      
-      if (data) {
-        setEnrolledCourses(new Set(data.map(e => e.course_id)))
-      }
-    }
-    checkEnrollments()
-  }, [])
 
   const categories = [
     { id: 'all', name: 'All Courses', icon: BookOpen },
@@ -61,7 +36,152 @@ export default function MarketplacePage() {
     { id: 'business', name: 'Business', icon: TrendingUp },
   ]
 
-  // Courses are imported from ./data so the list is shared between marketplace grid and detail pages
+  const courses = [
+    {
+      id: 1,
+      title: 'Complete Web Development Bootcamp 2025',
+      instructor: 'Dr. Angela Yu',
+      category: 'programming',
+      price: 3499,
+      originalPrice: 8999,
+      rating: 4.8,
+      reviews: 245000,
+      students: 890000,
+      duration: '65 hours',
+      level: 'Beginner',
+      image: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800',
+      bestseller: true,
+      updated: 'Dec 2024',
+      features: ['65 hours video', '140 downloadable resources', 'Certificate', 'Lifetime access'],
+      description: 'Master full-stack web development with HTML, CSS, JavaScript, React, Node.js, and MongoDB'
+    },
+    {
+      id: 2,
+      title: 'Machine Learning A-Z: Python & R in Data Science',
+      instructor: 'Kirill Eremenko',
+      category: 'ai',
+      price: 3999,
+      originalPrice: 9999,
+      rating: 4.9,
+      reviews: 156000,
+      students: 620000,
+      duration: '44 hours',
+      level: 'Intermediate',
+      image: 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=800',
+      bestseller: true,
+      updated: 'Nov 2024',
+      features: ['44 hours video', '50+ algorithms', 'Real projects', 'Certificate'],
+      description: 'Learn to create Machine Learning algorithms from scratch in Python and R'
+    },
+    {
+      id: 3,
+      title: 'UI/UX Design Masterclass: Complete Design System',
+      instructor: 'Brad Hussey',
+      category: 'design',
+      price: 2999,
+      originalPrice: 7999,
+      rating: 4.7,
+      reviews: 89000,
+      students: 340000,
+      duration: '38 hours',
+      level: 'Beginner',
+      image: 'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=800',
+      bestseller: false,
+      updated: 'Oct 2024',
+      features: ['38 hours video', 'Design projects', 'Figma templates', 'Portfolio ready'],
+      description: 'Master UI/UX design from scratch with Figma, Adobe XD, and real-world projects'
+    },
+    {
+      id: 4,
+      title: 'Data Science & Analytics Career Path',
+      instructor: 'Jose Portilla',
+      category: 'data',
+      price: 4499,
+      originalPrice: 10999,
+      rating: 4.8,
+      reviews: 178000,
+      students: 520000,
+      duration: '80 hours',
+      level: 'All Levels',
+      image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800',
+      bestseller: true,
+      updated: 'Dec 2024',
+      features: ['80 hours video', 'Python & SQL', '15 projects', 'Job ready'],
+      description: 'Complete data science bootcamp covering Python, SQL, Tableau, and Machine Learning'
+    },
+    {
+      id: 5,
+      title: 'Full Stack JavaScript with MERN Stack',
+      instructor: 'Maximilian Schwarzmüller',
+      category: 'programming',
+      price: 3299,
+      originalPrice: 8499,
+      rating: 4.7,
+      reviews: 123000,
+      students: 410000,
+      duration: '52 hours',
+      level: 'Intermediate',
+      image: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800',
+      bestseller: false,
+      updated: 'Nov 2024',
+      features: ['52 hours video', 'MERN projects', 'Deploy apps', 'Certificate'],
+      description: 'Build full-stack applications with MongoDB, Express, React, and Node.js'
+    },
+    {
+      id: 6,
+      title: 'Digital Marketing & Social Media Strategy',
+      instructor: 'Phil Ebiner',
+      category: 'business',
+      price: 2799,
+      originalPrice: 6999,
+      rating: 4.9,
+      reviews: 95000,
+      students: 280000,
+      duration: '42 hours',
+      level: 'Beginner',
+      image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800',
+      bestseller: false,
+      updated: 'Oct 2024',
+      features: ['42 hours video', 'SEO & SEM', 'Social media', 'Analytics'],
+      description: 'Master digital marketing, SEO, social media marketing, and content strategy'
+    },
+    {
+      id: 7,
+      title: 'Advanced React & Redux Complete Guide',
+      instructor: 'Stephen Grider',
+      category: 'programming',
+      price: 3699,
+      originalPrice: 8999,
+      rating: 4.9,
+      reviews: 142000,
+      students: 380000,
+      duration: '48 hours',
+      level: 'Advanced',
+      image: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=800',
+      bestseller: true,
+      updated: 'Dec 2024',
+      features: ['48 hours video', 'Advanced patterns', 'Redux toolkit', 'Testing'],
+      description: 'Deep dive into React hooks, Redux, Context API, and modern React patterns'
+    },
+    {
+      id: 8,
+      title: 'Graphic Design Bootcamp: Photoshop, Illustrator',
+      instructor: 'Lindsay Marsh',
+      category: 'design',
+      price: 2499,
+      originalPrice: 6499,
+      rating: 4.7,
+      reviews: 76000,
+      students: 210000,
+      duration: '35 hours',
+      level: 'Beginner',
+      image: 'https://images.unsplash.com/photo-1626785774625-ddcddc3445e9?w=800',
+      bestseller: false,
+      updated: 'Sep 2024',
+      features: ['35 hours video', 'Adobe Suite', '20+ projects', 'Portfolio'],
+      description: 'Learn professional graphic design with Adobe Photoshop and Illustrator'
+    },
+  ]
 
   const toggleLike = (courseId) => {
     setLikedCourses(prev => {
@@ -297,22 +417,9 @@ export default function MarketplacePage() {
                         <span className="text-sm text-gray-400 line-through">{course.originalPrice}</span>
                       </div>
                     </div>
-                    {enrolledCourses.has(course.id) ? (
-                      <Link
-                        href={`/marketplace/${course.id}/learn`}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center gap-1"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        Go to Course
-                      </Link>
-                    ) : (
-                      <Link
-                        href={`/marketplace/${course.id}`}
-                        className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
-                      >
-                        Enroll
-                      </Link>
-                    )}
+                    <button className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium">
+                      Enroll
+                    </button>
                   </div>
                 </div>
               </div>

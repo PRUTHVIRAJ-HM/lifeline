@@ -152,7 +152,7 @@ export default function DashboardLayout({ children }) {
                 {!sidebarMinimized && <span>Arena</span>}
               </button>
             </li>
-            <li>
+            <li className="hidden">
               <button
                 onClick={() => router.push('/marketplace')}
                 className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors ${

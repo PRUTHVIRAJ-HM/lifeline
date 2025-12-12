@@ -66,12 +66,12 @@ export default function CurriculumPage() {
 
       setUser(user)
 
-      // Load enrolled courses (both curriculum and marketplace)
+      // Load enrolled courses (source = 'curriculum')
       const { data: courses, error: coursesError } = await supabase
         .from('courses')
         .select('*')
         .eq('user_id', user.id)
-        .in('source', ['curriculum', 'marketplace'])
+        .eq('source', 'curriculum')
         .order('enrolled_at', { ascending: false })
 
       if (coursesError) {
@@ -319,13 +319,7 @@ export default function CurriculumPage() {
                       {/* Action Buttons */}
                       <div className="flex gap-3">
                         <button
-                          onClick={() => {
-                            if (course.source === 'marketplace' && course.marketplace_id) {
-                              router.push(`/marketplace/${course.marketplace_id}/learn`)
-                            } else {
-                              router.push(`/curriculum/${course.id}`)
-                            }
-                          }}
+                          onClick={() => router.push(`/curriculum/${course.id}`)}
                           className="w-full px-4 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
                         >
                           {progress === 0 ? <Play size={16} /> : <ChevronRight size={16} />}
