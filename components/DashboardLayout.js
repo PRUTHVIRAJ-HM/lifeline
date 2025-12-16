@@ -269,17 +269,6 @@ export default function DashboardLayout({ children }) {
             </div>
 
             <div className="flex items-center gap-4">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  type="text"
-                  placeholder="Search from courses..."
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-80 focus:outline-none focus:ring-2 focus:ring-[#4169E1] focus:border-transparent"
-                />
-              </div>
-
-             
               {/* Profile Dropdown */}
               <div className="relative">
                 <button 
