@@ -585,15 +585,14 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [activeSection, setActiveSection] = useState('profile')
+  const [paying, setPaying] = useState(false)
+  const [payMessage, setPayMessage] = useState('')
+  const [payments, setPayments] = useState([])
+  const [currentPlanName, setCurrentPlanName] = useState('Free')
   // Auto-select diagnostics tab if ?tab=diagnostics is present
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      const tab = params.get('tab')
-      if (tab === 'diagnostics') {
-        setActiveSection('diagnostics')
-      }
-    }
+    // Redirect base settings to profile for now
+    router.push('/settings/profile')
   }, [])
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -634,6 +633,99 @@ export default function SettingsPage() {
   
   const router = useRouter()
   const supabase = createClient()
+
+  // Load Razorpay script once
+  useEffect(() => {
+    const scriptId = 'razorpay-checkout'
+    if (typeof window !== 'undefined' && !document.getElementById(scriptId)) {
+      const s = document.createElement('script')
+      s.id = scriptId
+      s.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      s.async = true
+      document.body.appendChild(s)
+    }
+  }, [])
+
+  async function createOrder(amount) {
+    const res = await fetch('/api/billing/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount }),
+    })
+    if (!res.ok) throw new Error('Unable to create order')
+    return res.json()
+  }
+
+  async function startCheckout(planName, amountInRupees) {
+    try {
+      setPaying(true)
+      setPayMessage('')
+      const amount = amountInRupees * 100
+      const { orderId, key } = await createOrder(amount)
+
+      const options = {
+        key,
+        amount,
+        currency: 'INR',
+        name: 'Academix',
+        description: `${planName} Membership`,
+        order_id: orderId,
+        theme: { color: '#0EA5E9' },
+        handler: async function (response) {
+          // Persist payment to Supabase
+          try {
+            const { error } = await supabase
+              .from('payments')
+              .insert({
+                user_id: user?.id,
+                plan_name: planName,
+                amount_rupees: amountInRupees,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id || orderId,
+                razorpay_signature: response.razorpay_signature,
+                status: 'success'
+              })
+            if (error) throw error
+            setPayMessage('Payment successful! Membership activated.')
+            // Refresh billing history
+            await fetchPayments()
+          } catch (err) {
+            setPayMessage('Payment succeeded but logging failed: ' + (err.message || 'Unknown error'))
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setPayMessage('Payment cancelled')
+          },
+        },
+        prefill: {
+          name: user?.user_metadata?.full_name || 'Academix User',
+          email: user?.email || 'user@example.com',
+          contact: '9999999999',
+        },
+      }
+      const rzp = new window.Razorpay(options)
+      rzp.open()
+    } catch (e) {
+      setPayMessage(e.message || 'Payment failed')
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  async function fetchPayments() {
+    if (!user) return
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+    if (!error && data) {
+      setPayments(data)
+      const latest = data.find((p) => p.status === 'success')
+      if (latest?.plan_name) setCurrentPlanName(latest.plan_name)
+    }
+  }
 
   useEffect(() => {
     const getUser = async () => {
@@ -708,6 +800,8 @@ export default function SettingsPage() {
       }
 
       setLoading(false)
+      // Prefetch payments after user loads
+      fetchPayments()
     }
 
     getUser()
@@ -906,10 +1000,10 @@ export default function SettingsPage() {
   }
 
   const sections = [
-    { id: 'profile', name: 'Profile', icon: User },
-    { id: 'diagnostics', name: 'Diagnostics', icon: Activity },
-    { id: 'account', name: 'Account', icon: Trash2 },
-    { id: 'billing', name: 'Billing & Memberships', icon: CreditCard },
+    { id: 'profile', name: 'Profile', icon: User, href: '/settings/profile' },
+    { id: 'diagnostics', name: 'Diagnostics', icon: Activity, href: '/settings/diagnostics' },
+    { id: 'account', name: 'Account', icon: Trash2, href: '/settings/account' },
+    { id: 'billing', name: 'Billing & Memberships', icon: CreditCard, href: '/settings/billing' },
   ]
 
   return (
@@ -944,10 +1038,7 @@ export default function SettingsPage() {
                 return (
                   <button
                     key={section.id}
-                    onClick={() => {
-                      setActiveSection(section.id)
-                      setMessage({ type: '', text: '' })
-                    }}
+                    onClick={() => router.push(section.href)}
                     className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors mb-1 ${
                       activeSection === section.id
                         ? 'bg-gray-900 text-white'
@@ -980,214 +1071,29 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* Profile Section */}
+              {/* Profile Section moved to /settings/profile */}
               {activeSection === 'profile' && (
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-8">Profile Information</h2>
-                  
-                  {/* Hidden file input */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarUpload}
-                    className="hidden"
-                  />
-                  
-                  {/* Avatar Section */}
-                  <div className="mb-8 flex items-start space-x-6">
-                    <div className="relative">
-                      {avatarUrl ? (
-                        <img
-                          src={avatarUrl}
-                          alt="Profile"
-                          className="w-28 h-28 rounded-full object-cover border-2 border-gray-200"
-                        />
-                      ) : (
-                        <div className="w-28 h-28 rounded-full bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center text-white text-4xl font-semibold">
-                          {profileData.fullName ? profileData.fullName.charAt(0).toUpperCase() : user?.email?.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={handleAvatarClick}
-                        disabled={uploading}
-                        className="absolute bottom-0 right-0 p-2 bg-gray-900 rounded-full text-white hover:bg-gray-800 transition-colors shadow-lg disabled:opacity-50"
-                      >
-                        {uploading ? (
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <Camera className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                    <div className="pt-2">
-                      <h3 className="font-semibold text-gray-900 text-lg">
-                        {profileData.fullName || 'User Name'}
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {profileData.email}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-2">
-                        Click the camera icon to update your profile picture
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        JPG, PNG or GIF. Max size 2MB.
-                      </p>
-                    </div>
-                  </div>
-
-                  <form onSubmit={handleProfileUpdate} className="space-y-6">
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Full Name
-                        </label>
-                        <input
-                          type="text"
-                          value={profileData.fullName}
-                          onChange={(e) => setProfileData({ ...profileData, fullName: e.target.value })}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                          placeholder="Enter your full name"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Email Address
-                        </label>
-                        <input
-                          type="email"
-                          value={profileData.email}
-                          disabled
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Bio
-                      </label>
-                      <textarea
-                        value={profileData.bio}
-                        onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
-                        rows={4}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent resize-none"
-                        placeholder="Tell us about yourself..."
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Location
-                        </label>
-                        <input
-                          type="text"
-                          value={profileData.location}
-                          onChange={(e) => setProfileData({ ...profileData, location: e.target.value })}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                          placeholder="Enter your location"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                          <ExternalLink className="w-4 h-4 mr-1.5" />
-                          Portfolio/Resume Link
-                        </label>
-                        <input
-                          type="url"
-                          value={profileData.portfolioLink}
-                          onChange={(e) => setProfileData({ ...profileData, portfolioLink: e.target.value })}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                          placeholder="https://your-portfolio.com"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                        <Linkedin className="w-4 h-4 mr-1.5 text-blue-600" />
-                        LinkedIn Profile URL
-                      </label>
-                      <input
-                        type="url"
-                        value={profileData.linkedinProfile}
-                        onChange={(e) => setProfileData({ ...profileData, linkedinProfile: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                        placeholder="https://linkedin.com/in/your-profile"
-                      />
-                    </div>
-
-                    <div className="flex justify-end pt-4">
-                      <button
-                        type="submit"
-                        disabled={saving}
-                        className="flex items-center space-x-2 px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>{saving ? 'Saving...' : 'Save Changes'}</span>
-                      </button>
-                    </div>
-                  </form>
+                <div className="text-gray-700">
+                  <p>Profile settings have moved.</p>
+                  <button onClick={() => router.push('/settings/profile')} className="mt-3 px-4 py-2 bg-gray-900 text-white rounded-lg">Go to Profile</button>
                 </div>
               )}
 
               {/* Preferences Section - Removed */}
 
-              {/* Diagnostics Section */}
+              {/* Diagnostics moved to /settings/diagnostics */}
               {activeSection === 'diagnostics' && (
-                <DiagnosticsSection />
+                <div className="text-gray-700">
+                  <p>Diagnostics have moved.</p>
+                  <button onClick={() => router.push('/settings/diagnostics')} className="mt-3 px-4 py-2 bg-gray-900 text-white rounded-lg">Go to Diagnostics</button>
+                </div>
               )}
 
-              {/* Account Section */}
+              {/* Account moved to /settings/account */}
               {activeSection === 'account' && (
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-8">Account Management</h2>
-                  <div className="space-y-6">
-                    {/* Logout Section */}
-                    <div className="bg-white border border-gray-200 rounded-lg p-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-3">
-                          <Shield className="w-5 h-5 text-gray-600 mt-0.5" />
-                          <div>
-                            <h4 className="font-medium text-gray-900">Sign Out</h4>
-                            <p className="text-sm text-gray-600 mt-1">
-                              Sign out of your account on this device
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={handleSignOut}
-                          className="px-6 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800 transition-colors whitespace-nowrap ml-4"
-                        >
-                          Logout
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Delete Account Section */}
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-3">
-                          <Trash2 className="w-5 h-5 text-red-600 mt-0.5" />
-                          <div>
-                            <h4 className="font-medium text-red-900">Delete Account</h4>
-                            <p className="text-sm text-red-700 mt-1">
-                              Once you delete your account, there is no going back. Please be certain.
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          className="px-6 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors whitespace-nowrap ml-4"
-                        >
-                          Delete Account
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                <div className="text-gray-700">
+                  <p>Account settings have moved.</p>
+                  <button onClick={() => router.push('/settings/account')} className="mt-3 px-4 py-2 bg-gray-900 text-white rounded-lg">Go to Account</button>
                 </div>
               )}
 
@@ -1201,27 +1107,10 @@ export default function SettingsPage() {
                     <div className="flex items-start justify-between mb-4">
                       <div>
                         <p className="text-sm text-gray-300 mb-1">Current Plan</p>
-                        <h3 className="text-2xl font-bold">Free Plan</h3>
+                        <h3 className="text-2xl font-bold">{currentPlanName === 'Free' ? 'Free Plan' : `${currentPlanName} Plan`}</h3>
                       </div>
                       <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg">
-                        <p className="text-sm font-medium">₹0/month</p>
-                      </div>
-                    </div>
-                    <p className="text-gray-300 text-sm mb-4">
-                      You're currently on the free plan. Upgrade to unlock premium features and get the most out of your learning experience.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <div className="flex items-center space-x-2 text-sm">
-                        <Check className="w-4 h-4 text-[#F5C832]" />
-                        <span>Basic courses access</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm">
-                        <Check className="w-4 h-4 text-[#F5C832]" />
-                        <span>Limited AI assistance</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm">
-                        <Check className="w-4 h-4 text-[#F5C832]" />
-                        <span>Community support</span>
+                        <p className="text-sm font-medium">{currentPlanName === 'Free' ? 'Free Tier' : 'Paid Tier'}</p>
                       </div>
                     </div>
                   </div>
@@ -1233,40 +1122,47 @@ export default function SettingsPage() {
                       {/* Basic Plan */}
                       <div className="border-2 border-gray-200 rounded-xl p-6 hover:border-gray-300 transition-all">
                         <div className="mb-4">
-                          <h4 className="text-lg font-bold text-gray-900">Basic</h4>
+                          <h4 className="text-lg font-bold text-gray-900">Free</h4>
                           <p className="text-sm text-gray-600 mt-1">Perfect for beginners</p>
                         </div>
                         <div className="mb-6">
                           <div className="flex items-baseline">
-                            <span className="text-3xl font-bold text-gray-900">₹299</span>
-                            <span className="text-gray-600 ml-2">/month</span>
+                            <span className="text-3xl font-bold text-gray-900">Free</span>
+                            <span className="text-gray-600 ml-2">/year</span>
                           </div>
-                          <p className="text-sm text-gray-500 mt-1">or ₹2,990/year (Save 17%)</p>
                         </div>
                         <div className="space-y-3 mb-6">
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Access to all basic courses</span>
+                            <span className="text-sm text-gray-700">Access to 5 courses</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">AI assistance (50 queries/day)</span>
+                            <span className="text-sm text-gray-700">AI assistance (100 queries/month)</span>
+                          </div>
+                          <div className="flex items-start space-x-2">
+                            <X className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                            <span className="text-sm text-gray-700">Interview Preperation</span>
+                          </div>
+                          <div className="flex items-start space-x-2">
+                            <X className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                            <span className="text-sm text-gray-700">Resume Builder</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Resume builder</span>
+                            <span className="text-sm text-gray-700">Community</span>
+                          </div>
+                          <div className="flex items-start space-x-2">
+                            <X className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                            <span className="text-sm text-gray-700">Feeds</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Assignment tracking</span>
-                          </div>
-                          <div className="flex items-start space-x-2">
-                            <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Community forums</span>
+                            <span className="text-sm text-gray-700">Analytics</span>
                           </div>
                         </div>
                         <button className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium">
-                          Upgrade to Basic
+                          Free
                         </button>
                       </div>
 
@@ -1281,127 +1177,138 @@ export default function SettingsPage() {
                         </div>
                         <div className="mb-6">
                           <div className="flex items-baseline">
-                            <span className="text-3xl font-bold text-gray-900">₹599</span>
-                            <span className="text-gray-600 ml-2">/month</span>
+                            <span className="text-3xl font-bold text-gray-900">₹999</span>
+                            <span className="text-gray-600 ml-2">/year</span>
                           </div>
-                          <p className="text-sm text-gray-500 mt-1">or ₹5,990/year (Save 17%)</p>
                         </div>
                         <div className="space-y-3 mb-6">
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700 font-medium">Everything in Basic, plus:</span>
+                            <span className="text-sm text-gray-700">Access to 15 courses</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">All premium courses</span>
+                            <span className="text-sm text-gray-700">AI assistance (500 queries/month)</span>
+                          </div>
+                          <div className="flex items-start space-x-2">
+                            <X className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                            <span className="text-sm text-gray-700">Interview Preperation</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Unlimited AI assistance</span>
+                            <span className="text-sm text-gray-700">Resume Builder</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">1-on-1 mentorship (2 hrs/month)</span>
+                            <span className="text-sm text-gray-700">Community</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Priority support</span>
+                            <span className="text-sm text-gray-700">Feeds</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Certificates</span>
-                          </div>
-                          <div className="flex items-start space-x-2">
-                            <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Offline downloads</span>
+                            <span className="text-sm text-gray-700">Analytics</span>
                           </div>
                         </div>
-                        <button className="w-full py-3 bg-[#F5C832] text-gray-900 rounded-lg hover:bg-yellow-500 transition-colors font-bold">
-                          Upgrade to Pro
+                        <button
+                          disabled={paying}
+                          onClick={() => startCheckout('Pro', 999)}
+                          className="w-full py-3 bg-[#F5C832] text-gray-900 rounded-lg hover:bg-yellow-500 transition-colors font-bold disabled:opacity-50"
+                        >
+                          {paying ? 'Processing...' : 'Upgrade to Pro'}
                         </button>
                       </div>
 
                       {/* Enterprise Plan */}
                       <div className="border-2 border-gray-200 rounded-xl p-6 hover:border-gray-300 transition-all">
                         <div className="mb-4">
-                          <h4 className="text-lg font-bold text-gray-900">Enterprise</h4>
-                          <p className="text-sm text-gray-600 mt-1">For teams & institutions</p>
+                          <h4 className="text-lg font-bold text-gray-900">Supreme</h4>
+                          <p className="text-sm text-gray-600 mt-1">Advanced learners</p>
                         </div>
                         <div className="mb-6">
                           <div className="flex items-baseline">
-                            <span className="text-3xl font-bold text-gray-900">₹999</span>
-                            <span className="text-gray-600 ml-2">/month</span>
+                            <span className="text-3xl font-bold text-gray-900">₹1699</span>
+                            <span className="text-gray-600 ml-2">/year</span>
                           </div>
-                          <p className="text-sm text-gray-500 mt-1">or ₹9,990/year (Save 17%)</p>
                         </div>
                         <div className="space-y-3 mb-6">
-                          <div className="flex items-start space-x-2">
+                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700 font-medium">Everything in Pro, plus:</span>
+                            <span className="text-sm text-gray-700">Access to 30 courses</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Up to 50 team members</span>
+                            <span className="text-sm text-gray-700">AI assistance (Unlimited queries/month)</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Custom learning paths</span>
+                            <span className="text-sm text-gray-700">Interview Preperation</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Advanced analytics</span>
+                            <span className="text-sm text-gray-700">Resume Builder</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">Dedicated support</span>
+                            <span className="text-sm text-gray-700">Community</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">API access</span>
+                            <span className="text-sm text-gray-700">Feeds</span>
                           </div>
                           <div className="flex items-start space-x-2">
                             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-gray-700">SSO integration</span>
+                            <span className="text-sm text-gray-700">Analytics</span>
                           </div>
                         </div>
-                        <button className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium">
-                          Contact Sales
+                        <button
+                          disabled={paying}
+                          onClick={() => startCheckout('Supreme', 1699)}
+                          className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50"
+                        >
+                          {paying ? 'Processing...' : 'Upgrade to Supreme'}
                         </button>
                       </div>
                     </div>
+                    {payMessage && (
+                      <div className="mt-4 p-3 rounded-lg border border-gray-200 text-sm text-gray-700">{payMessage}</div>
+                    )}
                   </div>
 
-                  {/* Payment Methods */}
-                  <div className="mb-8">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Methods</h3>
-                    <div className="border border-gray-200 rounded-xl p-6">
-                      <div className="text-center py-8">
-                        <CreditCard className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                        <p className="text-gray-600 mb-1">No payment methods added</p>
-                        <p className="text-sm text-gray-500 mb-4">Add a payment method to upgrade your plan</p>
-                        <button className="px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors inline-flex items-center space-x-2">
-                          <CreditCard className="w-4 h-4" />
-                          <span>Add Payment Method</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
 
                   {/* Billing History */}
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Billing History</h3>
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
                       <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
-                        <div className="grid grid-cols-4 gap-4 text-sm font-medium text-gray-700">
+                        <div className="grid grid-cols-5 gap-4 text-sm font-medium text-gray-700">
                           <div>Date</div>
                           <div>Description</div>
+                          <div>Payment ID</div>
                           <div>Amount</div>
                           <div>Status</div>
                         </div>
                       </div>
-                      <div className="p-8 text-center">
-                        <p className="text-gray-500">No billing history available</p>
-                      </div>
+                      {payments && payments.length > 0 ? (
+                        <div>
+                          {payments.map((p) => (
+                            <div key={p.id} className="px-6 py-3 border-t border-gray-100">
+                              <div className="grid grid-cols-5 gap-4 text-sm">
+                                <div className="text-gray-700">{new Date(p.created_at).toLocaleString()}</div>
+                                  <div className="text-gray-900 font-medium">{p.plan_name} Membership</div>
+                                <div className="text-gray-700 truncate">{p.razorpay_payment_id || '-'}</div>
+                                <div className="text-gray-900 font-semibold">₹{p.amount_rupees}</div>
+                                <div className={`font-semibold ${p.status === 'success' ? 'text-green-600' : 'text-red-600'}`}>{p.status}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-8 text-center">
+                          <p className="text-gray-500">No billing history available</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

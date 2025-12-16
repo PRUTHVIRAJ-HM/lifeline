@@ -18,9 +18,9 @@ import {
   ShoppingBag,
   ChevronLeft,
   ChevronRight,
-  Store,
   Sparkles
 } from 'lucide-react'
+import { FEATURES, hasAccess } from '@/lib/plan'
 
 export default function DashboardLayout({ children }) {
   const [user, setUser] = useState(null)
@@ -28,6 +28,7 @@ export default function DashboardLayout({ children }) {
   const [loading, setLoading] = useState(true)
   const [showProfileDropdown, setShowProfileDropdown] = useState(false)
   const [sidebarMinimized, setSidebarMinimized] = useState(false)
+  const [currentPlanName, setCurrentPlanName] = useState('Free')
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
@@ -51,6 +52,18 @@ export default function DashboardLayout({ children }) {
         .single()
 
       setProfile(profileData)
+
+      // Fetch latest successful payment to determine current plan
+      const { data: payments } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (payments && payments.length) {
+        const latest = payments.find((p) => p.status === 'success')
+        if (latest?.plan_name) setCurrentPlanName(latest.plan_name)
+      }
       setLoading(false)
     }
 
@@ -70,6 +83,14 @@ export default function DashboardLayout({ children }) {
       return pathname === '/dashboard'
     }
     return pathname?.startsWith(path)
+  }
+
+  const gotoOrUpgrade = (path, featureKey) => {
+    if (hasAccess(currentPlanName, featureKey)) {
+      router.push(path)
+    } else {
+      router.push('/settings/billing')
+    }
   }
 
   const handleLogout = async () => {
@@ -112,7 +133,7 @@ export default function DashboardLayout({ children }) {
             </li>
             <li>
               <button
-                onClick={() => router.push('/cognix')}
+                onClick={() => gotoOrUpgrade('/cognix', FEATURES.cognix)}
                 className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors ${
                   isActive('/cognix')
                     ? 'bg-gray-900 text-white' 
@@ -126,7 +147,7 @@ export default function DashboardLayout({ children }) {
             </li>
             <li>
               <button
-                onClick={() => router.push('/curriculum')}
+                onClick={() => gotoOrUpgrade('/curriculum', FEATURES.curriculum)}
                 className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors ${
                   isActive('/curriculum')
                     ? 'bg-gray-900 text-white' 
@@ -140,7 +161,7 @@ export default function DashboardLayout({ children }) {
             </li>
             <li>
               <button
-                onClick={() => router.push('/arena')}
+                onClick={() => gotoOrUpgrade('/arena', FEATURES.arena)}
                 className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors ${
                   isActive('/arena')
                     ? 'bg-gray-900 text-white' 
@@ -152,23 +173,9 @@ export default function DashboardLayout({ children }) {
                 {!sidebarMinimized && <span>Arena</span>}
               </button>
             </li>
-            <li className="hidden">
-              <button
-                onClick={() => router.push('/marketplace')}
-                className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors ${
-                  isActive('/marketplace')
-                    ? 'bg-gray-900 text-white' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-                title={sidebarMinimized ? 'Marketplace' : ''}
-              >
-                <Store size={20} />
-                {!sidebarMinimized && <span>Marketplace</span>}
-              </button>
-            </li>
             <li>
               <button
-                onClick={() => router.push('/assignment')}
+                onClick={() => gotoOrUpgrade('/assignment', FEATURES.assignment)}
                 className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors ${
                   isActive('/assignment')
                     ? 'bg-gray-900 text-white' 
@@ -182,7 +189,7 @@ export default function DashboardLayout({ children }) {
             </li>
             <li>
               <button
-                onClick={() => router.push('/feeds')}
+                onClick={() => gotoOrUpgrade('/feeds', FEATURES.feeds)}
                 className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors ${
                   isActive('/feeds')
                     ? 'bg-gray-900 text-white' 
@@ -196,7 +203,7 @@ export default function DashboardLayout({ children }) {
             </li>
             <li>
               <button
-                onClick={() => router.push('/conversations')}
+                onClick={() => gotoOrUpgrade('/conversations', FEATURES.conversations)}
                 className={`w-full flex items-center ${sidebarMinimized ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-colors ${
                   isActive('/conversations')
                     ? 'bg-gray-900 text-white' 
@@ -253,7 +260,12 @@ export default function DashboardLayout({ children }) {
               <h1 className="text-2xl font-bold text-gray-900">
                 Hello, {profile?.full_name || 'there'} 
               </h1>
-              <p className="text-gray-500 text-sm">Let's learn something new today!</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-gray-500 text-sm">Let's learn something new today!</p>
+                <span className="text-xs px-2 py-1 rounded-full bg-gray-900 text-white">
+                  {currentPlanName === 'Free' ? 'Free Tier' : `${currentPlanName} Tier`}
+                </span>
+              </div>
             </div>
 
             <div className="flex items-center gap-4">
