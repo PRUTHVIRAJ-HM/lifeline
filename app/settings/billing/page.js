@@ -7,7 +7,7 @@ import { createClient } from '../../../lib/supabase/client'
 export default function SettingsBillingPage() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [paying, setPaying] = useState(false)
+  const [processingPlan, setProcessingPlan] = useState(null)
   const [payMessage, setPayMessage] = useState('')
   const [payments, setPayments] = useState([])
   const [currentPlanName, setCurrentPlanName] = useState('Free')
@@ -59,7 +59,7 @@ export default function SettingsBillingPage() {
 
   async function startCheckout(planName, amountInRupees) {
     try {
-      setPaying(true)
+      setProcessingPlan(planName)
       setPayMessage('')
       const amount = amountInRupees * 100
       const { orderId, key } = await createOrder(amount)
@@ -105,7 +105,7 @@ export default function SettingsBillingPage() {
     } catch (e) {
       setPayMessage(e.message || 'Payment failed')
     } finally {
-      setPaying(false)
+      setProcessingPlan(null)
     }
   }
 
@@ -161,7 +161,7 @@ export default function SettingsBillingPage() {
                   <div className="flex items-start space-x-2"><Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-sm text-gray-700">Feeds</span></div>
                   <div className="flex items-start space-x-2"><Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-sm text-gray-700">Analytics</span></div>
                 </div>
-                <button disabled={paying} onClick={() => startCheckout('Pro', 999)} className="w-full py-3 bg-[#F5C832] text-gray-900 rounded-lg hover:bg-yellow-500 transition-colors font-bold disabled:opacity-50">{paying ? 'Processing...' : 'Upgrade to Pro'}</button>
+                <button disabled={processingPlan !== null} onClick={() => startCheckout('Pro', 999)} className="w-full py-3 bg-[#F5C832] text-gray-900 rounded-lg hover:bg-yellow-500 transition-colors font-bold disabled:opacity-50">{processingPlan === 'Pro' ? 'Processing...' : 'Upgrade to Pro'}</button>
               </div>
               <div className="border-2 border-gray-200 rounded-xl p-6 hover:border-gray-300 transition-all">
                 <div className="mb-4"><h4 className="text-lg font-bold text-gray-900">Supreme</h4><p className="text-sm text-gray-600 mt-1">Advanced learners</p></div>
@@ -175,7 +175,7 @@ export default function SettingsBillingPage() {
                   <div className="flex items-start space-x-2"><Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-sm text-gray-700">Feeds</span></div>
                   <div className="flex items-start space-x-2"><Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-sm text-gray-700">Analytics</span></div>
                 </div>
-                <button disabled={paying} onClick={() => startCheckout('Supreme', 1699)} className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50">{paying ? 'Processing...' : 'Upgrade to Supreme'}</button>
+                <button disabled={processingPlan !== null} onClick={() => startCheckout('Supreme', 1699)} className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50">{processingPlan === 'Supreme' ? 'Processing...' : 'Upgrade to Supreme'}</button>
               </div>
             </div>
             {payMessage && (<div className="mt-4 p-3 rounded-lg border border-gray-200 text-sm text-gray-700">{payMessage}</div>)}

@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { getCurrentPlan, getUserUsage, incrementUsage, getUsageLimit, USAGE_LIMITS } from '@/lib/plan'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -36,8 +37,11 @@ export default function CognixAssistPage() {
   const [recognition, setRecognition] = useState(null)
   const [researchMode, setResearchMode] = useState('quick') // 'quick' or 'deep'
   const [showModeDropdown, setShowModeDropdown] = useState(false)
-    const [showOptionsMenu, setShowOptionsMenu] = useState(false)
-    const [copiedKey, setCopiedKey] = useState(null)
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false)
+  const [copiedKey, setCopiedKey] = useState(null)
+  const [currentPlan, setCurrentPlan] = useState('Free')
+  const [usage, setUsage] = useState({ ai_queries: 0, course_count: 0 })
+  const [queryLimit, setQueryLimit] = useState(100)
   const router = useRouter()
   const supabase = createClient()
   const messagesEndRef = useRef(null)
@@ -127,6 +131,17 @@ export default function CognixAssistPage() {
       }
 
       setUser(user)
+      
+      // Get current plan and usage
+      const plan = await getCurrentPlan()
+      setCurrentPlan(plan)
+      
+      const userUsage = await getUserUsage(user.id)
+      setUsage(userUsage)
+      
+      const limit = getUsageLimit(plan, 'maxAIQueries')
+      setQueryLimit(limit)
+      
       await loadChatHistory(user.id)
       setLoading(false)
     }
@@ -345,6 +360,13 @@ export default function CognixAssistPage() {
     
     if (!inputMessage.trim()) return
 
+    // Check AI query limit for Free tier
+    if (currentPlan === 'Free' && queryLimit !== -1 && usage.ai_queries >= queryLimit) {
+      alert(`You've reached your monthly limit of ${queryLimit} AI queries. Please upgrade to Pro or Supreme for more queries.`)
+      router.push('/settings/billing')
+      return
+    }
+
     const userMessage = {
       id: Date.now(),
       text: inputMessage,
@@ -369,6 +391,10 @@ export default function CognixAssistPage() {
     setMessages(prev => [...prev, aiMessage])
 
     try {
+      // Increment AI query count
+      await incrementUsage(user.id, 'ai_queries')
+      setUsage(prev => ({ ...prev, ai_queries: prev.ai_queries + 1 }))
+      
       // Call the API with streaming
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -542,15 +568,31 @@ export default function CognixAssistPage() {
 
         {/* Upgrade Section */}
         <div className="p-4 border-t border-gray-200">
-          <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg p-4 mb-4">
-            <div className="text-sm font-semibold text-gray-900 mb-2">Your trial ends in 7 days</div>
-            <div className="text-xs text-gray-600 mb-3">
-              Keep enjoying unlimited chats, detailed reports, and premium AI tools without interruption.
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <div className="text-sm font-semibold text-gray-900 mb-2">AI Usage This Month</div>
+            <div className="mb-3">
+              <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                <span>Queries</span>
+                <span>{usage.ai_queries} / {queryLimit === -1 ? '∞' : queryLimit}</span>
+              </div>
+              {queryLimit !== -1 && (
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all"
+                    style={{ width: `${Math.min((usage.ai_queries / queryLimit) * 100, 100)}%` }}
+                  ></div>
+                </div>
+              )}
             </div>
-            <button className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors">
-              <Zap size={18} />
-              <span>Upgrade</span>
-            </button>
+            {currentPlan === 'Free' && queryLimit !== -1 && usage.ai_queries >= queryLimit * 0.8 && (
+              <button 
+                onClick={() => router.push('/settings/billing')}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#F5C832] hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold transition-colors text-sm"
+              >
+                <Zap size={16} />
+                <span>Upgrade for More</span>
+              </button>
+            )}
           </div>
           
           {/* Help Center */}

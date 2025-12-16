@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/DashboardLayout'
+import { getCurrentPlan, hasAccess, FEATURES } from '@/lib/plan'
 import { 
   Brain,
   MessageSquare,
@@ -11,12 +12,14 @@ import {
   Briefcase,
   Sparkles,
   ArrowRight,
-  Users
+  Users,
+  Lock
 } from 'lucide-react'
 
 export default function CognixPage() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [currentPlan, setCurrentPlan] = useState('Free')
   const router = useRouter()
   const supabase = createClient()
 
@@ -30,6 +33,8 @@ export default function CognixPage() {
       }
 
       setUser(user)
+      const plan = await getCurrentPlan()
+      setCurrentPlan(plan)
       setLoading(false)
     }
 
@@ -56,7 +61,8 @@ export default function CognixPage() {
       iconColor: 'text-blue-600',
       borderColor: 'border-blue-200',
       features: ['24/7 AI Support', 'Personalized Learning', 'Instant Answers'],
-      route: '/cognix/assist'
+      route: '/cognix/assist',
+      requiresFeature: FEATURES.cognix
     },
     {
       id: 'builder',
@@ -67,7 +73,8 @@ export default function CognixPage() {
       iconColor: 'text-green-600',
       borderColor: 'border-green-200',
       features: ['Resume Builder', 'PDF Export', 'Professional Templates'],
-      route: '/cognix/builder'
+      route: '/cognix/builder',
+      requiresFeature: FEATURES.resume
     },
     {
       id: 'interview',
@@ -78,11 +85,16 @@ export default function CognixPage() {
       iconColor: 'text-orange-600',
       borderColor: 'border-orange-200',
       features: ['Mock Interviews', 'Real-time Feedback', 'Performance Analysis'],
-      route: '/cognix/interview'
+      route: '/cognix/interview',
+      requiresFeature: FEATURES.interview
     }
   ]
 
-  const handleProductClick = (route) => {
+  const handleProductClick = (route, requiresFeature) => {
+    if (requiresFeature && !hasAccess(currentPlan, requiresFeature)) {
+      router.push('/settings/billing')
+      return
+    }
     router.push(route)
   }
 
@@ -174,15 +186,22 @@ export default function CognixPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {cognixProducts.map((product, index) => {
               const Icon = product.icon
+              const isLocked = product.requiresFeature && !hasAccess(currentPlan, product.requiresFeature)
               return (
                 <div
                   key={product.id}
-                  onClick={() => handleProductClick(product.route)}
-                  className="group relative bg-white rounded-2xl border-2 border-gray-200 p-8 hover:border-gray-900 hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden"
+                  onClick={() => handleProductClick(product.route, product.requiresFeature)}
+                  className={`group relative bg-white rounded-2xl border-2 ${isLocked ? 'border-gray-300' : 'border-gray-200'} p-8 hover:border-gray-900 hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden ${isLocked ? 'opacity-75' : ''}`}
                   style={{
                     animationDelay: `${index * 100}ms`
                   }}
                 >
+                  {isLocked && (
+                    <div className="absolute top-4 right-4 z-20 bg-gray-900 text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      Upgrade
+                    </div>
+                  )}
                   {/* Gradient Background on Hover */}
                   <div className={`absolute inset-0 ${product.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}></div>
                   
@@ -218,10 +237,10 @@ export default function CognixPage() {
                     {/* CTA Button */}
                     <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                       <span className="text-sm font-semibold text-gray-900 group-hover:text-gray-800">
-                        Get Started →
+                        {isLocked ? 'Unlock Now →' : 'Get Started →'}
                       </span>
                       <div className={`px-3 py-1 bg-gray-100 rounded-full text-xs font-medium ${product.iconColor} group-hover:bg-white`}>
-                        Free
+                        {isLocked ? 'Locked' : 'Available'}
                       </div>
                     </div>
                   </div>

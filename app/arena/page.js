@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { getCurrentPlan, getUserUsage, incrementUsage, getUsageLimit } from '@/lib/plan'
 import { 
   Sparkles,
   Brain,
@@ -34,6 +35,9 @@ export default function ArenaPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [previewCourse, setPreviewCourse] = useState(null)
   const [expandedChapter, setExpandedChapter] = useState(null)
+  const [currentPlan, setCurrentPlan] = useState('free')
+  const [usage, setUsage] = useState(null)
+  const [courseLimit, setCourseLimit] = useState(5)
   const router = useRouter()
   const supabase = createClient()
   
@@ -57,6 +61,16 @@ export default function ArenaPage() {
       }
 
       setUser(user)
+
+      // Load current plan and usage
+      const plan = await getCurrentPlan(user.id)
+      setCurrentPlan(plan)
+      
+      const usageData = await getUserUsage(user.id)
+      setUsage(usageData)
+      
+      const limit = getUsageLimit(plan, 'maxCourses')
+      setCourseLimit(limit)
 
       // Load arena courses (source = 'arena')
       const { data: courses, error } = await supabase
@@ -214,6 +228,16 @@ export default function ArenaPage() {
   }
 
   const handleGenerateAICourse = async () => {
+    // Check course limit for current plan
+    if (usage && courseLimit !== 'unlimited') {
+      const currentCourseCount = generatedCourses.length
+      if (currentCourseCount >= courseLimit) {
+        showNotification(`You've reached your course limit (${courseLimit} courses). Upgrade to create more!`, 'warning')
+        router.push('/settings/billing')
+        return
+      }
+    }
+
     setIsGenerating(true)
 
     try {
@@ -430,6 +454,14 @@ BAD example (too generic):
       if (error) throw error
 
       setGeneratedCourses(prev => [newCourse, ...prev])
+      
+      // Increment course count
+      if (user) {
+        await incrementUsage(user.id, 'course_count')
+        const updatedUsage = await getUserUsage(user.id)
+        setUsage(updatedUsage)
+      }
+      
       setShowAIModal(false)
       showNotification('Course generated successfully with AI!', 'success')
 
@@ -534,8 +566,21 @@ BAD example (too generic):
 
               <div className="grid grid-cols-3 gap-4 mt-8 max-w-xl mx-auto">
                 <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
-                  <div className="text-2xl font-bold text-[#F5C832] mb-0.5">{generatedCourses.length}</div>
-                  <div className="text-xs text-gray-300">Courses Created</div>
+                  <div className="text-2xl font-bold text-[#F5C832] mb-0.5">
+                    {generatedCourses.length}
+                    {courseLimit !== 'unlimited' && (
+                      <span className="text-base text-gray-300"> / {courseLimit}</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-300">
+                    Courses {courseLimit !== 'unlimited' ? 'Used' : 'Created'}
+                  </div>
+                  {courseLimit !== 'unlimited' && generatedCourses.length >= courseLimit * 0.8 && (
+                    <div className="text-xs text-yellow-400 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      <span>Limit approaching</span>
+                    </div>
+                  )}
                 </div>
                 <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
                   <div className="text-2xl font-bold text-[#F5C832] mb-0.5">100%</div>
