@@ -1012,14 +1012,24 @@ BAD example (too generic):
 
         {/* Preview Modal */}
         {previewCourse && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4 overflow-y-auto">
-            <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl my-8">
+          <div 
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4 overflow-y-auto"
+            onClick={() => { setPreviewCourse(null); setExpandedChapter(null); }}
+          >
+            <div 
+              className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl my-8"
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* Header with Thumbnail Background */}
               <div className="relative h-48 bg-gradient-to-br from-gray-900 to-gray-800 overflow-hidden rounded-t-2xl">
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                 <button 
-                  onClick={() => { setPreviewCourse(null); setExpandedChapter(null); }} 
-                  className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full transition-colors"
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    setPreviewCourse(null); 
+                    setExpandedChapter(null); 
+                  }} 
+                  className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full transition-colors z-10"
                 >
                   <X className="w-6 h-6 text-white" />
                 </button>

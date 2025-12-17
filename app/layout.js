@@ -1,6 +1,8 @@
 import { Poppins } from "next/font/google";
 import "./globals.css";
 import SessionTracker from "@/components/SessionTracker";
+import ToastContainer from "@/components/ToastContainer";
+import { ToastProvider } from "@/lib/ToastContext";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -19,8 +21,11 @@ export default function RootLayout({ children }) {
       <body
         className={`${poppins.variable} antialiased`}
       >
-        <SessionTracker />
-        {children}
+        <ToastProvider>
+          <SessionTracker />
+          <ToastContainer />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );
