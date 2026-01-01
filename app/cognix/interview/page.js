@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ChevronRight,
   Volume2,
+  VolumeX,
   MoreVertical,
   FileQuestion,
   Lightbulb,
@@ -17,6 +18,7 @@ import {
 export default function InterviewWarmupPage() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [isMuted, setIsMuted] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showFAQ, setShowFAQ] = useState(false)
   const [showTips, setShowTips] = useState(false)
@@ -55,6 +57,17 @@ export default function InterviewWarmupPage() {
     router.push(`/cognix/interview/practice?field=${encodeURIComponent(field.name)}`)
   }
 
+  // Toggle mute/unmute
+  const toggleMute = () => {
+    if (isMuted) {
+      window.speechSynthesis.resume()
+      setIsMuted(false)
+    } else {
+      window.speechSynthesis.cancel()
+      setIsMuted(true)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
@@ -82,8 +95,16 @@ export default function InterviewWarmupPage() {
               </div>
               
               <div className="flex items-center gap-2">
-                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                  <Volume2 size={20} className="text-gray-700" />
+                <button 
+                  onClick={toggleMute}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title={isMuted ? "Unmute" : "Mute"}
+                >
+                  {isMuted ? (
+                    <VolumeX size={20} className="text-gray-700" />
+                  ) : (
+                    <Volume2 size={20} className="text-gray-700" />
+                  )}
                 </button>
                 <div className="relative">
                   <button 

@@ -45,11 +45,13 @@ Format your response EXACTLY as JSON:
 
     // Try Ollama first
     try {
-      const ollamaRes = await fetch("https://api.ollamahub.com/v1/chat/completions", {
+      const baseUrl = process.env.OLLAMA_BASE_URL || 'https://api.ollamahub.com/v1'
+      const ollamaRes = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${process.env.OLLAMA_API_KEY}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Accept": "application/json"
         },
         body: JSON.stringify({
           model: "gpt-oss:120b-cloud",
@@ -62,25 +64,37 @@ Format your response EXACTLY as JSON:
         })
       })
 
-      if (ollamaRes.ok) {
-        const ollamaData = await ollamaRes.json()
-        const content = ollamaData.choices?.[0]?.message?.content
-        
-        if (content) {
-          // Try to parse JSON from the response
-          try {
-            const jsonMatch = content.match(/\{[\s\S]*\}/)
-            if (jsonMatch) {
-              const analysis = JSON.parse(jsonMatch[0])
-              return NextResponse.json(analysis)
-            }
-          } catch (parseErr) {
-            console.error("Failed to parse Ollama JSON:", parseErr)
+      if (!ollamaRes.ok) {
+        const errorText = await ollamaRes.text()
+        console.error('Ollama API error:', ollamaRes.status, ollamaRes.statusText, errorText)
+        throw new Error(`Ollama API error: ${ollamaRes.status}`)
+      }
+
+      const responseText = await ollamaRes.text()
+      
+      // Check if response is HTML (error page)
+      if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+        console.error("Ollama API returned HTML instead of JSON. Response:", responseText.substring(0, 200))
+        throw new Error("Invalid API response - received HTML")
+      }
+      
+      const ollamaData = JSON.parse(responseText)
+      const content = ollamaData.choices?.[0]?.message?.content
+      
+      if (content) {
+        // Try to parse JSON from the response
+        try {
+          const jsonMatch = content.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            const analysis = JSON.parse(jsonMatch[0])
+            return NextResponse.json(analysis)
           }
+        } catch (parseErr) {
+          console.error("Failed to parse Ollama JSON:", parseErr)
         }
       }
     } catch (ollamaErr) {
-      console.error("Ollama analysis error:", ollamaErr)
+      console.error("Ollama analysis error:", ollamaErr.message || ollamaErr)
     }
 
     // Fallback to Gemini

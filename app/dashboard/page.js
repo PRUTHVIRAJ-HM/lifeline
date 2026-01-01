@@ -519,15 +519,15 @@ export default function DashboardPage() {
                             {data.exams > 0 && (
                               <div 
                                 className="w-full bg-[#FFE0B2] rounded-t-lg"
-                                style={{ height: `${Math.max(data.exams * 20, 8)}px` }}
+                                style={{ height: `${Math.min(Math.max(data.exams * 60, 12), 220)}px` }}
                               ></div>
                             )}
                             <div 
                               className={`w-full bg-[#FF8A65] ${data.exams === 0 ? 'rounded-t-lg' : ''}`}
-                              style={{ height: `${Math.max(data.study * 20, data.study > 0 ? 8 : 0)}px` }}
+                              style={{ height: `${Math.min(Math.max(data.study * 60, data.study > 0 ? 12 : 0), 220)}px` }}
                             ></div>
                           </div>
-                          <span className="text-xs text-gray-500 mt-2">{data.month} {data.day}</span>
+                          <span className="text-xs text-gray-500 mt-2">{data.day}</span>
                         </div>
                       ))}
                     </div>
