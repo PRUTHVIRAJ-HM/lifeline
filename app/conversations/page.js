@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/DashboardLayout'
@@ -163,7 +163,7 @@ function CustomChannelPreview({ channel, setActiveChannel, activeChannel, videoC
 }
 
 // Video Call Component
-function VideoCallUI({ call, onEndCall, otherUser }) {
+const VideoCallUI = React.memo(({ call, onEndCall, otherUser }) => {
   const { useCallCallingState, useParticipantCount } = useCallStateHooks();
   const callingState = useCallCallingState();
   const participantCount = useParticipantCount();
@@ -189,13 +189,8 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
 
   const toggleScreenShare = async () => {
     try {
-      if (isScreenSharing) {
-        await call.stopPublish('screenShareTrack');
-        setIsScreenSharing(false);
-      } else {
-        await call.screenShare.toggle();
-        setIsScreenSharing(true);
-      }
+      await call.screenShare.toggle();
+      setIsScreenSharing(!isScreenSharing);
     } catch (error) {
       console.error('Screen share error:', error);
       alert('Failed to share screen. Please try again.');
@@ -207,6 +202,14 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
       <div className="fixed inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-black z-50 flex flex-col">
         {/* Video Area */}
         <div className="flex-1 relative">
+          <style jsx global>{`
+            .str-video__call-stats,
+            .str-video__connection-quality,
+            .str-video__notification,
+            .str-video__connection-unstable {
+              color: white !important;
+            }
+          `}</style>
           <SpeakerLayout participantsBarPosition="bottom" />
           
           {/* Call Info */}
@@ -231,13 +234,13 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
         </div>
 
         {/* Custom Controls */}
-        <div className="bg-gradient-to-t from-black via-gray-900/95 to-transparent px-4 sm:px-8 py-4 sm:py-8 pb-20 sm:pb-12">
-          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
+        <div className="bg-gradient-to-t from-black via-gray-900/95 to-transparent px-4 sm:px-8 py-4 sm:py-6 pb-28 sm:pb-20">
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
             {/* Microphone Toggle */}
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-1.5">
               <button
                 onClick={toggleMic}
-                className={`p-4 sm:p-5 rounded-full transition-all shadow-2xl ${
+                className={`p-3 sm:p-4 rounded-full transition-all shadow-2xl ${
                   isMicOn 
                     ? 'bg-white/20 hover:bg-white/30 backdrop-blur-md' 
                     : 'bg-red-600 hover:bg-red-700'
@@ -245,9 +248,9 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
                 title={isMicOn ? 'Mute' : 'Unmute'}
               >
                 {isMicOn ? (
-                  <Mic className="text-white w-6 h-6 sm:w-7 sm:h-7" />
+                  <Mic className="text-white w-5 h-5 sm:w-6 sm:h-6" />
                 ) : (
-                  <MicOff className="text-white w-6 h-6 sm:w-7 sm:h-7" />
+                  <MicOff className="text-white w-5 h-5 sm:w-6 sm:h-6" />
                 )}
               </button>
               <span className="text-white text-[11px] sm:text-xs font-medium">
@@ -256,10 +259,10 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
             </div>
 
             {/* Camera Toggle */}
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-1.5">
               <button
                 onClick={toggleCamera}
-                className={`p-4 sm:p-5 rounded-full transition-all shadow-2xl ${
+                className={`p-3 sm:p-4 rounded-full transition-all shadow-2xl ${
                   isCameraOn 
                     ? 'bg-white/20 hover:bg-white/30 backdrop-blur-md' 
                     : 'bg-red-600 hover:bg-red-700'
@@ -267,9 +270,9 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
                 title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
               >
                 {isCameraOn ? (
-                  <Video className="text-white w-6 h-6 sm:w-7 sm:h-7" />
+                  <Video className="text-white w-5 h-5 sm:w-6 sm:h-6" />
                 ) : (
-                  <VideoOff className="text-white w-6 h-6 sm:w-7 sm:h-7" />
+                  <VideoOff className="text-white w-5 h-5 sm:w-6 sm:h-6" />
                 )}
               </button>
               <span className="text-white text-[11px] sm:text-xs font-medium">
@@ -278,17 +281,17 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
             </div>
 
             {/* Screen Share Toggle */}
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-1.5">
               <button
                 onClick={toggleScreenShare}
-                className={`p-4 sm:p-5 rounded-full transition-all shadow-2xl ${
+                className={`p-3 sm:p-4 rounded-full transition-all shadow-2xl ${
                   isScreenSharing 
                     ? 'bg-green-600 hover:bg-green-700' 
                     : 'bg-white/20 hover:bg-white/30 backdrop-blur-md'
                 }`}
                 title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
               >
-                <MonitorUp className="text-white w-6 h-6 sm:w-7 sm:h-7" />
+                <MonitorUp className="text-white w-5 h-5 sm:w-6 sm:h-6" />
               </button>
               <span className="text-white text-[11px] sm:text-xs font-medium">
                 {isScreenSharing ? 'Sharing' : 'Share'}
@@ -296,22 +299,22 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
             </div>
 
             {/* End Call */}
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-1.5">
               <button
                 onClick={onEndCall}
-                className="p-5 sm:p-6 bg-red-600 hover:bg-red-700 rounded-full transition-all shadow-2xl ring-2 ring-red-400/50"
+                className="p-3 sm:p-4 bg-red-600 hover:bg-red-700 rounded-full transition-all shadow-2xl ring-2 ring-red-400/50"
                 title="End call"
               >
-                <PhoneOff className="text-white w-7 h-7 sm:w-8 sm:h-8" />
+                <PhoneOff className="text-white w-6 h-6 sm:w-7 sm:h-7" />
               </button>
               <span className="text-white text-[11px] sm:text-xs font-medium">End Call</span>
             </div>
 
             {/* Speaker Toggle */}
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-1.5">
               <button
                 onClick={toggleSpeaker}
-                className={`p-4 sm:p-5 rounded-full transition-all shadow-2xl ${
+                className={`p-3 sm:p-4 rounded-full transition-all shadow-2xl ${
                   isSpeakerOn 
                     ? 'bg-white/20 hover:bg-white/30 backdrop-blur-md' 
                     : 'bg-red-600 hover:bg-red-700'
@@ -319,9 +322,9 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
                 title={isSpeakerOn ? 'Mute speaker' : 'Unmute speaker'}
               >
                 {isSpeakerOn ? (
-                  <Volume2 className="text-white w-6 h-6 sm:w-7 sm:h-7" />
+                  <Volume2 className="text-white w-5 h-5 sm:w-6 sm:h-6" />
                 ) : (
-                  <VolumeX className="text-white w-6 h-6 sm:w-7 sm:h-7" />
+                  <VolumeX className="text-white w-5 h-5 sm:w-6 sm:h-6" />
                 )}
               </button>
               <span className="text-white text-[11px] sm:text-xs font-medium">
@@ -331,7 +334,7 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
           </div>
 
           {/* Call Status */}
-          <div className="text-center mt-4 sm:mt-6">
+          <div className="text-center mt-3 sm:mt-4">
             <p className="text-white/80 text-xs sm:text-sm font-medium">
               {participantCount} participant{participantCount !== 1 ? 's' : ''} in call
               {isScreenSharing && <span className="ml-2 text-green-400">• Screen sharing</span>}
@@ -341,7 +344,7 @@ function VideoCallUI({ call, onEndCall, otherUser }) {
       </div>
     </StreamTheme>
   );
-}
+});
 
 export default function ConversationsPage() {
   const [user, setUser] = useState(null)
@@ -546,12 +549,12 @@ export default function ConversationsPage() {
     }
   }
 
-  const endVideoCall = async () => {
+  const endVideoCall = useCallback(async () => {
     if (currentCall) {
       await currentCall.leave()
       setCurrentCall(null)
     }
-  }
+  }, [currentCall])
 
   const clearChat = async () => {
     if (!activeChannel) return
@@ -733,13 +736,13 @@ export default function ConversationsPage() {
   };
 
   // Get other user info from active channel
-  const getOtherUser = () => {
+  const otherUser = useMemo(() => {
     if (!activeChannel) return null
     const otherMembers = Object.values(activeChannel.state.members).filter(
       member => member.user?.id !== user?.id
     )
     return otherMembers[0]?.user
-  }
+  }, [activeChannel, user?.id])
 
   // Channel filters and sort
   const filters = { type: 'messaging', members: { $in: [user?.id] } }
@@ -1047,7 +1050,7 @@ export default function ConversationsPage() {
               <VideoCallUI 
                 call={currentCall} 
                 onEndCall={endVideoCall}
-                otherUser={getOtherUser()}
+                otherUser={otherUser}
               />
             </StreamCall>
           </StreamVideo>
